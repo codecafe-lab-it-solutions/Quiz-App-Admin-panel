@@ -60,7 +60,7 @@ export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
   );
   const [durationMinutes, setDurationMinutes] = useState("30");
   const [randomize, setRandomize] = useState(true);
-  const [negativeMarking, setNegativeMarking] = useState(false);
+  const [negativeMarking, setNegativeMarking] = useState(true);
   const [allowSkipSwitch, setAllowSkipSwitch] = useState(true);
   const [requireLocation, setRequireLocation] = useState(true);
   const [submitting, setSubmitting] = useState(false);
