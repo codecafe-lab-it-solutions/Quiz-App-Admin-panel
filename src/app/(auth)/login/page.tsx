@@ -121,6 +121,12 @@ function LoginForm() {
                 </button>
               </div>
               {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+              <Link
+                href="/login/forgot-password"
+                className="block text-right text-sm text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Forgot password?
+              </Link>
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? "Signing in..." : "Sign in"}
