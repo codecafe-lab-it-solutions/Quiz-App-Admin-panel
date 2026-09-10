@@ -31,7 +31,7 @@ import {
   QuestionRow,
 } from "@/components/quiz/question-editor-dialog";
 import { RichTextDisplay } from "@/components/quiz/rich-text-display";
-import { Copy, Pencil, Plus, Smartphone, Trash2, Upload } from "lucide-react";
+import { Copy, Pencil, Play, Plus, Square, Trash2, Upload } from "lucide-react";
 
 const CLIENT_PAGE_SIZE = 10;
 
@@ -426,6 +426,30 @@ export function QuizManagement({
     }
   };
 
+  const handleStartQuiz = async () => {
+    try {
+      await apiClient.post(`/api/faculty/quiz/${quizId}/start`);
+      toast.success("Quiz started");
+      mutate();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError ? error.message : "Failed to start quiz",
+      );
+    }
+  };
+
+  const handleStopQuiz = async () => {
+    try {
+      await apiClient.post(`/api/faculty/quiz/${quizId}/stop`);
+      toast.success("Quiz stopped");
+      mutate();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError ? error.message : "Failed to stop quiz",
+      );
+    }
+  };
+
   const handleDeleteQuiz = async () => {
     try {
       await apiClient.delete(`/api/faculty/quiz/${quizId}`);
@@ -749,19 +773,6 @@ export function QuizManagement({
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle className="text-xl">{quiz.title}</CardTitle>
               <Badge variant={statusVariant[quiz.status]}>{quiz.status}</Badge>
-              {(quiz.status === "draft" ||
-                quiz.status === "scheduled" ||
-                quiz.status === "live") && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 font-normal text-muted-foreground"
-                >
-                  <Smartphone className="h-3 w-3" />
-                  {quiz.status === "live"
-                    ? "Stop via faculty app"
-                    : "Start via faculty app"}
-                </Badge>
-              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {quiz.courseName} ({quiz.courseCode}) · Section:{" "}
@@ -771,6 +782,34 @@ export function QuizManagement({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            {(quiz.status === "draft" || quiz.status === "scheduled") && (
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm">
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Quiz
+                  </Button>
+                }
+                title="Start this quiz?"
+                description="Students who are allotted this quiz will be able to begin their attempt immediately."
+                confirmLabel="Start Quiz"
+                onConfirm={handleStartQuiz}
+              />
+            )}
+            {quiz.status === "live" && (
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="destructive">
+                    <Square className="mr-2 h-4 w-4" />
+                    Stop Quiz
+                  </Button>
+                }
+                title="Stop this quiz?"
+                description="This auto-submits every in-progress attempt with its current answers and marks any allotted student who never started as absent. This cannot be undone."
+                confirmLabel="Stop Quiz"
+                onConfirm={handleStopQuiz}
+              />
+            )}
             {canEditQuestions && (
               <Button size="sm" variant="outline" onClick={openEditDialog}>
                 <Pencil className="mr-2 h-4 w-4" />

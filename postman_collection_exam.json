@@ -161,6 +161,14 @@
           }
         },
         {
+          "name": "Start Quiz",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/start",
+            "description": "Goes live: flips status from draft/scheduled to live and stamps actualStartTime. Also callable by an admin as an override. 400 if the quiz is already live, 400 if completed (cannot restart), 400 if it has no questions yet, 400 if no students are allotted yet. Only works for a quiz owned by this faculty (404 otherwise) unless called by an admin. Once live, students with an allotment can call Start Attempt below."
+          }
+        },
+        {
           "name": "Stop Quiz",
           "request": {
             "method": "POST",
