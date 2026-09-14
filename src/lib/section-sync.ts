@@ -76,6 +76,28 @@ export async function getRealSectionsForFacultyCourse(
  * legitimately belong. Only excluded when their sem_now points at a
  * *different* real section of this same course+major - that's the case
  * where they're actually enrolled elsewhere.
+ *
+ * A rarer case a plain sem check can't separate: two real sections sharing
+ * BOTH the same major AND the same sem for this course under DIFFERENT
+ * section names (e.g. RF0240's real "PE_5" and a later "PE_T", both PE
+ * major, both sem 5, for PE312) - sem alone can't tell their registrants
+ * apart since it's identical on both sides. This is NOT the same thing as
+ * several faculty co-teaching one shared section (very common - e.g. 3
+ * different facRoll rows all named "DPE_3" for PE205): that case has ONE
+ * section name and must keep showing every registrant to every co-teaching
+ * faculty, unchanged. Only >1 DISTINCT section name sharing a major+sem is
+ * a real collision. Broken by two more existing, real signals instead of a
+ * new column: isr_sub_available_tbl.id (which distinct section name was
+ * created first - the real, pre-existing one) and each registrant's own
+ * isr_reg_<batch>_tbl.rs_flag (see getCourseRegistrations/isAppAdded - every
+ * real legacy registrant carries a genuine flag; a row this app inserted via
+ * bulkRegisterStudentsForSection/createStudentCourseMapping never sets one,
+ * so it's left at the schema default). The earlier ("original") section name
+ * keeps only registrants with a real flag; a later ("duplicate") section
+ * name keeps only registrants this app itself added. Not foolproof for 3+
+ * colliding section names all created independently through the app, but
+ * exact for the real pattern here: one pre-existing legacy cohort plus one
+ * later hand-picked addition under a different name.
  */
 export async function getStudentsForRealSections(
   facultyRoll: string,
@@ -93,32 +115,86 @@ export async function getStudentsForRealSections(
   const registrations = await getCourseRegistrations(subCode, subList);
   const registeredRolls = new Set(registrations.map((r) => r.roll));
   if (registeredRolls.size === 0) return [];
+  const appAddedRolls = new Set(registrations.filter((r) => r.isAppAdded).map((r) => r.roll));
 
   const realMajors = await getRealMajors();
   const majors = new Set(rows.map((row) => resolveMajorFromBranch(row.branch ?? "", realMajors)));
   const targetSems = new Set(rows.map((row) => row.sem).filter((sem): sem is number => sem != null));
 
-  // Every real section (any faculty) for this exact course, so a registrant
-  // whose own sem_now points at a *different* one of them can be told apart
-  // from one who only vaguely shares a major with this section.
+  // Every real section (any faculty) for this exact course, collapsed to one
+  // entry per DISTINCT section name (co-teaching faculty share a name and
+  // must stay one unit) with that name's own earliest row id, so a registrant
+  // whose own sem_now points at a *different* section name can be told apart
+  // from one who only vaguely shares a major, and so a major+sem pair
+  // genuinely contested by more than one distinct section name can be found.
   const allCourseSectionRows = await prisma.isrSubAvailableTbl.findMany({
     where: { subCode, subList, section: { not: null } },
   });
-  const otherSemsByMajor = new Map<string, Set<number>>();
+  const minIdByName = new Map<string, number>();
+  const majorSemByName = new Map<string, { major: string; sem: number }>();
   for (const row of allCourseSectionRows) {
-    if (row.sem == null) continue;
+    if (row.sem == null || !row.section) continue;
     const major = resolveMajorFromBranch(row.branch ?? "", realMajors);
+    minIdByName.set(row.section, Math.min(row.id, minIdByName.get(row.section) ?? row.id));
+    majorSemByName.set(row.section, { major, sem: row.sem });
+  }
+  const targetMinId = Math.min(...sectionNames.map((name) => minIdByName.get(name) ?? Infinity));
+
+  const otherSemsByMajor = new Map<string, Set<number>>();
+  const namesByMajorSem = new Map<string, Set<string>>();
+  const minSectionIdByMajor = new Map<string, number>();
+  for (const [name, { major, sem }] of majorSemByName) {
     if (!otherSemsByMajor.has(major)) otherSemsByMajor.set(major, new Set());
-    otherSemsByMajor.get(major)!.add(row.sem);
+    otherSemsByMajor.get(major)!.add(sem);
+    const key = `${major}_${sem}`;
+    if (!namesByMajorSem.has(key)) namesByMajorSem.set(key, new Set());
+    namesByMajorSem.get(key)!.add(name);
+    const nameMinId = minIdByName.get(name)!;
+    minSectionIdByMajor.set(major, Math.min(nameMinId, minSectionIdByMajor.get(major) ?? nameMinId));
   }
 
   const students = await prisma.isrStuMainTbl.findMany({
     where: { major: { in: [...majors] }, roll: { in: [...registeredRolls] } },
     select: { roll: true, major: true, semNow: true },
   });
+
+  // The origin/duplicate split below is only safe to apply to a contested
+  // major+sem group when there's actually an app-added registrant in it to
+  // anchor it - otherwise it's two genuinely separate REAL legacy cohorts
+  // that happen to collide on major+sem (confirmed: "DPE_5"/"PE_5" for
+  // PE301, "DPE_3"/"PE_3" for PE202 - Diploma vs Degree branches that
+  // resolve to the same major, no app-added registrant on either side), and
+  // splitting them with no real signal would just as wrongly zero out
+  // whichever name loses the id tiebreak. Left merged (old behavior) instead.
+  const hasAppAddedAnchorByKey = new Set<string>();
+  for (const s of students) {
+    if (appAddedRolls.has(s.roll)) hasAppAddedAnchorByKey.add(`${s.major}_${s.semNow}`);
+  }
+
   const rolls = new Set(
     students
-      .filter((s) => targetSems.has(s.semNow) || !otherSemsByMajor.get(s.major)?.has(s.semNow))
+      .filter((s) => {
+        if (!targetSems.has(s.semNow)) {
+          // Backlog/repeat carve-out: no real section matches their sem at
+          // all, so fall back to their major's earliest-created (native)
+          // section name only - not every section that happens to share the
+          // major, or a backlog student would leak into a later duplicate
+          // section too.
+          if (otherSemsByMajor.get(s.major)?.has(s.semNow)) return false;
+          return targetMinId === minSectionIdByMajor.get(s.major);
+        }
+        const key = `${s.major}_${s.semNow}`;
+        const names = namesByMajorSem.get(key) ?? new Set();
+        if (names.size <= 1 || !hasAppAddedAnchorByKey.has(key)) return true; // uncontested, or contested with no safe way to split
+        // Contested with a real anchor: this exact major+sem is shared by
+        // multiple DISTINCT section names, and at least one registrant was
+        // added via this app rather than the original legacy import. The
+        // earliest-created name gets the real legacy registrants; every
+        // later one gets only what this app itself added.
+        const minNameId = Math.min(...[...names].map((n) => minIdByName.get(n)!));
+        const isOriginalSection = targetMinId === minNameId;
+        return isOriginalSection ? !appAddedRolls.has(s.roll) : appAddedRolls.has(s.roll);
+      })
       .map((s) => s.roll)
   );
 
