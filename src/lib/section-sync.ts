@@ -55,7 +55,7 @@ export async function getRealSectionsForFacultyCourse(
  * Live candidate students for a faculty's course across the given real
  * section names. Resolves each section name back to its real branch row in
  * isr_sub_available_tbl, derives the real major from branch, and uses
- * isr_stu_main_tbl by major only to scope which department a registrant has
+ * isr_stu_main_tbl by major to scope which department a registrant has
  * to belong to - the actual inclusion test is a real registration row for
  * this exact (subCode, subList) in the student's own isr_reg_<batch>_tbl (see
  * getCourseRegistrations). A student with no registration row anywhere is
@@ -63,13 +63,19 @@ export async function getRealSectionsForFacultyCourse(
  * fallback. Faculty -> course -> section -> student must all be real,
  * verified mappings, never an inferred default-include.
  *
- * Deliberately NOT filtered on isr_stu_main_tbl.sem_now: a real registration
- * row is by itself sufficient proof a student is taking the course this
- * cycle, and sem_now can legitimately lag behind that for backlog/repeat
- * students (confirmed against RF0240/PE312/C2 - 2 of the 58 real
+ * Also cross-checked against isr_stu_main_tbl.sem_now, but NOT with a blind
+ * equality - two real sections can share a major with different sem (e.g.
+ * CE_3 and CE_5 both teaching the same subCode under different faculty), and
+ * without this check a registrant of the OTHER section used to leak into
+ * this one just for sharing the major. So: a registrant is kept if their
+ * sem_now matches one of THIS section's own sem values, OR - the deliberate
+ * backlog/repeat carve-out (confirmed against RF0240/PE312/C2 - 2 of 58 real
  * registrants sit at sem_now=4 despite being registered for a sem-5
- * subject). Requiring sem_now to also match wrongly dropped real
- * registrants.
+ * subject) - if their sem_now doesn't match ANY real section that exists for
+ * this exact course+major, meaning there's nowhere else for them to
+ * legitimately belong. Only excluded when their sem_now points at a
+ * *different* real section of this same course+major - that's the case
+ * where they're actually enrolled elsewhere.
  */
 export async function getStudentsForRealSections(
   facultyRoll: string,
@@ -90,11 +96,31 @@ export async function getStudentsForRealSections(
 
   const realMajors = await getRealMajors();
   const majors = new Set(rows.map((row) => resolveMajorFromBranch(row.branch ?? "", realMajors)));
+  const targetSems = new Set(rows.map((row) => row.sem).filter((sem): sem is number => sem != null));
+
+  // Every real section (any faculty) for this exact course, so a registrant
+  // whose own sem_now points at a *different* one of them can be told apart
+  // from one who only vaguely shares a major with this section.
+  const allCourseSectionRows = await prisma.isrSubAvailableTbl.findMany({
+    where: { subCode, subList, section: { not: null } },
+  });
+  const otherSemsByMajor = new Map<string, Set<number>>();
+  for (const row of allCourseSectionRows) {
+    if (row.sem == null) continue;
+    const major = resolveMajorFromBranch(row.branch ?? "", realMajors);
+    if (!otherSemsByMajor.has(major)) otherSemsByMajor.set(major, new Set());
+    otherSemsByMajor.get(major)!.add(row.sem);
+  }
+
   const students = await prisma.isrStuMainTbl.findMany({
     where: { major: { in: [...majors] }, roll: { in: [...registeredRolls] } },
-    select: { roll: true },
+    select: { roll: true, major: true, semNow: true },
   });
-  const rolls = new Set(students.map((s) => s.roll));
+  const rolls = new Set(
+    students
+      .filter((s) => targetSems.has(s.semNow) || !otherSemsByMajor.get(s.major)?.has(s.semNow))
+      .map((s) => s.roll)
+  );
 
   const names = await getStudentNamesByRolls([...rolls]);
   return [...rolls]
