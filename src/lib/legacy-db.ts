@@ -843,40 +843,19 @@ export async function getStudentCourses(roll: string, batch: string, subList: st
   }
 }
 
-// Real column (see 20260810090000_legacy_reg_table_full_parity) - a genuine
-// legacy re-registration/backlog code (e.g. "C", "BL2", "DE1") on every row
-// the real university import ever wrote, confirmed campus-wide: only 3 of
-// ~39,000 real registration rows carry the schema default "N" instead of a
-// real code. So rs_flag = "N" is, in practice, a reliable tell for "this row
-// was inserted by this app's own bulk-register/create-mapping flow" (which
-// never sets rs_flag - see bulkRegisterStudentsForSection/
-// createStudentCourseMapping), not a real legacy registrant. Used by
-// getStudentsForRealSections to break the tie when two real sections
-// collide on the same major+sem (no other column distinguishes them - see
-// that function's comment).
-const REG_RS_FLAG_COLUMN = "rs_flag";
-const REG_DEFAULT_RS_FLAG = "N";
-
-export async function getCourseRegistrations(courseCode: string, subList: string): Promise<(StudentCourseRow & { batch: string; isAppAdded: boolean })[]> {
+export async function getCourseRegistrations(courseCode: string, subList: string): Promise<(StudentCourseRow & { batch: string })[]> {
   const registry = (await listBatchRegistry()).filter((r) => r.isActive);
-  const results: (StudentCourseRow & { batch: string; isAppAdded: boolean })[] = [];
+  const results: (StudentCourseRow & { batch: string })[] = [];
 
   for (const entry of registry) {
     if (!SAFE_TABLE_NAME.test(entry.tableName)) continue;
     try {
       const rows = await prisma.$queryRawUnsafe<Record<string, string>[]>(
-        `SELECT \`${REG_ROLL_COLUMN}\` AS roll, \`${REG_SUB_CODE_COLUMN}\` AS sub_code, \`${REG_RS_FLAG_COLUMN}\` AS rs_flag FROM \`${entry.tableName}\` WHERE \`${REG_SUB_CODE_COLUMN}\` = ? AND \`${REG_SUB_LIST_COLUMN}\` = ?`,
+        `SELECT \`${REG_ROLL_COLUMN}\` AS roll, \`${REG_SUB_CODE_COLUMN}\` AS sub_code FROM \`${entry.tableName}\` WHERE \`${REG_SUB_CODE_COLUMN}\` = ? AND \`${REG_SUB_LIST_COLUMN}\` = ?`,
         courseCode,
         subList
       );
-      results.push(
-        ...rows.map((r) => ({
-          roll: r.roll,
-          subCode: r.sub_code,
-          batch: entry.batchName,
-          isAppAdded: (r.rs_flag ?? REG_DEFAULT_RS_FLAG) === REG_DEFAULT_RS_FLAG,
-        }))
-      );
+      results.push(...rows.map((r) => ({ roll: r.roll, subCode: r.sub_code, batch: entry.batchName })));
     } catch (error) {
       console.error(`getCourseRegistrations: query against ${entry.tableName} failed`, error);
     }
