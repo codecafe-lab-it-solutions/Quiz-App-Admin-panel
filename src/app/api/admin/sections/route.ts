@@ -10,6 +10,7 @@ import {
   resolveMajorFromBranch,
 } from "@/lib/legacy-db";
 import { getCurrentSubList } from "@/lib/config";
+import { addSectionToStudents } from "@/lib/section-sync";
 
 // Section-first view: GET lists every real section for the current cycle
 // (grouped isr_sub_available_tbl.section values). POST creates a section -
@@ -56,6 +57,12 @@ export async function POST(req: NextRequest) {
       subList: currentSubList,
       rolls: body.rolls,
     });
+
+    // Record membership on the student rows themselves - the roster check
+    // (getStudentsForRealSections) reads isr_stu_main_tbl.section, so without
+    // this the new section would show no students.
+    const sectionName = `${major}_${body.sem}`;
+    await addSectionToStudents(body.rolls, sectionName);
 
     return created({ mapping, allotment });
   } catch (error) {

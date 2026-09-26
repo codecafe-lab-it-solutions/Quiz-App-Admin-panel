@@ -270,13 +270,14 @@ model IsrStuMainTbl {
   newPassword   String?   @map("new_password")
   requestStatus Int?      @map("request_status")
 
-  // App-added, NOT part of the real university dump - a denormalized,
-  // comma-joined list of every Section (Major_Semester) this student
-  // currently belongs to (see section_students), kept in sync by
-  // refreshStudentSectionColumn (section-sync.ts) on every membership
-  // change and rewritten after every legacy re-import, since
-  // importRealLegacyData() truncates this table from the raw dump (which
-  // has no such column) on every reseed.
+  // App-added, NOT part of the real university dump - the source of truth
+  // for section membership: a comma-joined list of every section name this
+  // student belongs to (e.g. "PE_5,PE_T"). Read by getStudentsForRealSections
+  // (section-sync.ts) for every faculty roster/allotment; written by
+  // addSectionToStudents / fillEmptyStudentSection when students are added to
+  // a section, and backfilled with scripts/backfill-student-sections.ts.
+  // importRealLegacyData() truncates this table from the raw dump (which has
+  // no such column), so re-run the backfill after any legacy re-import.
   section String? @db.Text
 
   @@map("isr_stu_main_tbl")

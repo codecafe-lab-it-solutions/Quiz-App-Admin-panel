@@ -16,6 +16,7 @@ import {
   createStudentCourseMapping,
 } from "@/lib/legacy-db";
 import { getCurrentSubList } from "@/lib/config";
+import { fillEmptyStudentSection } from "@/lib/section-sync";
 
 // Paginates an already-fetched, size-bounded array (bounded by a real roll
 // set - a section's membership - not by an unbounded DB scan) - used for the
@@ -194,6 +195,9 @@ export async function POST(req: NextRequest) {
     const body = studentCourseMappingCreateSchema.parse(await req.json());
     const subList = await getCurrentSubList();
     const mapping = await createStudentCourseMapping({ ...body, subList });
+    // A student with no section yet would never appear in any roster; give
+    // them one if it can be resolved unambiguously (never overwrites).
+    await fillEmptyStudentSection(body.roll, subList);
 
     return created(mapping);
   } catch (error) {
