@@ -36,6 +36,12 @@ export const splitCandidatesQuerySchema = z.object({
   subCode: z.string().trim().min(1, "Course is required"),
 });
 
+// Backs the Sections page's "Students" count, once clicked - the full
+// roster for one section.
+export const sectionStudentsQuerySchema = z.object({
+  section: z.string().trim().min(1, "Section is required"),
+});
+
 // No `.refine` requiring roll/courseCode - when neither is given, the route
 // returns a bounded "recently registered" default list instead of erroring,
 // so the page shows real data immediately rather than only after a search.

@@ -96,6 +96,18 @@ interface SplitCandidatesResponse {
   items: SplitSection[];
 }
 
+interface SectionStudentRow {
+  roll: string;
+  name: string;
+  batch: string | null;
+  major: string;
+  semNow: number;
+}
+
+interface SectionStudentsResponse {
+  items: SectionStudentRow[];
+}
+
 interface SplitMoveResult {
   movedCount: number;
   keptBothCount: number;
@@ -124,6 +136,7 @@ const courseFetcher = (url: string) => apiClient.get<{ items: CourseOption[] }>(
 const branchSemFetcher = (url: string) => apiClient.get<{ items: BranchSemOption[] }>(url);
 const candidatesFetcher = (url: string) => apiClient.get<CandidatesResponse>(url);
 const splitCandidatesFetcher = (url: string) => apiClient.get<SplitCandidatesResponse>(url);
+const sectionStudentsFetcher = (url: string) => apiClient.get<SectionStudentsResponse>(url);
 
 const schema = z.object({
   facRoll: z.string().trim().min(1, "Faculty is required"),
@@ -149,6 +162,8 @@ export default function SectionsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [viewingSection, setViewingSection] = useState<Section | null>(null);
+  const [viewingStudentsSection, setViewingStudentsSection] = useState<Section | null>(null);
+  const [studentsSearch, setStudentsSearch] = useState("");
   const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set());
   const [showOthers, setShowOthers] = useState(false);
   const [mode, setMode] = useState<"branch" | "split">("branch");
@@ -170,6 +185,20 @@ export default function SectionsPage() {
   const [splitCourseBlocks, setSplitCourseBlocks] = useState<SplitCourseBlock[]>([]);
 
   const { data, isLoading, mutate } = useSWR("/api/admin/sections", fetcher);
+
+  // Full roster for whichever section's "Students" count was clicked.
+  const { data: sectionStudentsData, isLoading: sectionStudentsLoading } = useSWR(
+    viewingStudentsSection
+      ? `/api/admin/sections/students?section=${encodeURIComponent(viewingStudentsSection.name)}`
+      : null,
+    sectionStudentsFetcher,
+  );
+  const sectionStudents = sectionStudentsData?.items ?? [];
+  const filteredSectionStudents = sectionStudents.filter((s) => {
+    const q = studentsSearch.trim().toLowerCase();
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q) || s.roll.toLowerCase().includes(q);
+  });
 
   const {
     handleSubmit,
@@ -463,10 +492,17 @@ export default function SectionsPage() {
       key: "studentCount",
       header: "Students",
       render: (r) => (
-        <span className="inline-flex items-center gap-1.5">
-          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setStudentsSearch("");
+            setViewingStudentsSection(r);
+          }}
+        >
+          <Users className="mr-2 h-3.5 w-3.5" />
           {r.studentCount}
-        </span>
+        </Button>
       ),
     },
     {
@@ -546,6 +582,63 @@ export default function SectionsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingSection(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full roster for one section - the "Students" count made clickable,
+          same membership getAllSections's count itself uses so the list
+          shown always matches the number on the page. */}
+      <Dialog
+        open={viewingStudentsSection != null}
+        onOpenChange={(open) => !open && setViewingStudentsSection(null)}
+      >
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{viewingStudentsSection?.name} - Students</DialogTitle>
+            <DialogDescription>
+              Every real student who belongs to this section
+              {viewingStudentsSection ? ` - ${viewingStudentsSection.studentCount} in total` : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          {sectionStudents.length > 5 && (
+            <input
+              type="text"
+              value={studentsSearch}
+              onChange={(e) => setStudentsSearch(e.target.value)}
+              placeholder="Search by name or roll..."
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          )}
+          <div className="flex-1 space-y-1 overflow-y-auto">
+            {sectionStudentsLoading ? (
+              <p className="p-3 text-sm text-muted-foreground">Loading students...</p>
+            ) : sectionStudents.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">No students found for this section.</p>
+            ) : filteredSectionStudents.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">No students match &quot;{studentsSearch}&quot;.</p>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {filteredSectionStudents.map((s) => (
+                  <div key={s.roll} className="flex items-center justify-between gap-2.5 p-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{s.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {s.roll} · {s.batch ?? "no batch"}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0 font-normal">
+                      {s.major} · Sem {s.semNow}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingStudentsSection(null)}>
               Close
             </Button>
           </DialogFooter>

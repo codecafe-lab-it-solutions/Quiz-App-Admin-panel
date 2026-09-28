@@ -802,7 +802,7 @@ export async function getAllSections(subList: string): Promise<SectionSummary[]>
   const entries = [...bySection.entries()];
   const counts = await Promise.all(
     entries.map(([name, v]) =>
-      // A split-created section (see createSplitSectionMapping) has no real
+      // A split-created section (see createSectionMappingRow) has no real
       // branch/sem of its own - major+semNow can't derive its membership, so
       // fall back to the real membership source, the section tag itself
       // (isr_stu_main_tbl.section), matching what getStudentsForRealSections
@@ -823,6 +823,42 @@ export async function getAllSections(subList: string): Promise<SectionSummary[]>
       courses: v.courses,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface SectionStudentRow {
+  roll: string;
+  name: string;
+  batch: string | null;
+  major: string;
+  semNow: number;
+}
+
+// Full roster for one section - backs the Sections page's "Students" count
+// once it's made clickable. Same membership resolution getAllSections's
+// count uses just above: real major+semNow when the section has a real
+// branch-derived isr_sub_available_tbl row this cycle, otherwise the section
+// tag itself (isr_stu_main_tbl.section) for a split-created section with no
+// branch/sem of its own - so the list shown always matches the count on the
+// page exactly.
+export async function getSectionStudents(sectionName: string, subList: string): Promise<SectionStudentRow[]> {
+  const realRow = await prisma.isrSubAvailableTbl.findFirst({
+    where: { subList, section: sectionName, branch: { not: null } },
+  });
+
+  const rows = realRow
+    ? await prisma.isrStuMainTbl.findMany({
+        where: {
+          major: resolveMajorFromBranch(realRow.branch ?? "", await getRealMajors()),
+          ...(realRow.sem != null ? { semNow: Number(realRow.sem) } : {}),
+        },
+        select: { roll: true, name: true, batch: true, major: true, semNow: true },
+      })
+    : await prisma.isrStuMainTbl.findMany({
+        where: sectionTagWhere(sectionName),
+        select: { roll: true, name: true, batch: true, major: true, semNow: true },
+      });
+
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface ExistingCourseSection {
