@@ -182,6 +182,94 @@ export async function addSectionToStudents(rolls: string[], sectionName: string)
   return updated;
 }
 
+export interface SectionMoveResult {
+  movedCount: number;
+  keptBothCount: number;
+  skipped: { roll: string; reason: string }[];
+}
+
+/**
+ * Moves each given student from their old section tag to a new one (the
+ * "Split Existing Sections" flow) - the first removal path for
+ * isr_stu_main_tbl.section, alongside addSectionToStudents' append-only one.
+ * A student whose old section name is also used by a DIFFERENT course they're
+ * registered in keeps that old tag (removing it would silently break their
+ * roster visibility for that other course) and just gains the new tag too -
+ * reported back as "kept both" rather than a clean move, so the admin knows
+ * the old faculty may still see them there for that other course.
+ */
+export async function moveStudentsBetweenSections(
+  moves: { roll: string; fromSection: string }[],
+  toSection: string,
+  subCode: string,
+  subList: string
+): Promise<SectionMoveResult> {
+  const byRoll = new Map(moves.map((m) => [m.roll, m.fromSection]));
+  if (byRoll.size === 0) return { movedCount: 0, keptBothCount: 0, skipped: [] };
+
+  const students = await prisma.isrStuMainTbl.findMany({
+    where: { roll: { in: [...byRoll.keys()] } },
+    select: { roll: true, batch: true, section: true },
+  });
+
+  // Other real mapping rows this cycle sharing one of the fromSection names
+  // but for a DIFFERENT course - used below to decide whether stripping a
+  // student's old tag is actually safe, or would silently break their roster
+  // for that other course.
+  const fromSectionNames = [...new Set(byRoll.values())];
+  const otherCourseRows = await prisma.isrSubAvailableTbl.findMany({
+    where: { subList, section: { in: fromSectionNames }, subCode: { not: subCode } },
+    select: { section: true, subCode: true },
+  });
+  const otherCoursesBySection = new Map<string, Set<string>>();
+  for (const row of otherCourseRows) {
+    if (!row.section || !row.subCode) continue;
+    const set = otherCoursesBySection.get(row.section) ?? new Set<string>();
+    set.add(row.subCode);
+    otherCoursesBySection.set(row.section, set);
+  }
+
+  let movedCount = 0;
+  let keptBothCount = 0;
+  const skipped: { roll: string; reason: string }[] = [];
+
+  for (const student of students) {
+    const fromSection = byRoll.get(student.roll)!;
+    const sections = parseSectionList(student.section);
+    if (!sections.includes(fromSection)) {
+      skipped.push({ roll: student.roll, reason: `not currently in section "${fromSection}"` });
+      continue;
+    }
+
+    const otherCourses = otherCoursesBySection.get(fromSection);
+    let stillNeedsOldTag = false;
+    if (otherCourses && otherCourses.size > 0 && student.batch) {
+      const registeredCodes = new Set(
+        (await getStudentCourses(student.roll, student.batch, subList)).map((c) => c.subCode),
+      );
+      stillNeedsOldTag = [...otherCourses].some((code) => registeredCodes.has(code));
+    }
+
+    const next = stillNeedsOldTag ? sections : sections.filter((s) => s !== fromSection);
+    if (!next.includes(toSection)) next.push(toSection);
+
+    await prisma.isrStuMainTbl.update({
+      where: { roll: student.roll },
+      data: { section: next.join(",") },
+    });
+
+    if (stillNeedsOldTag) keptBothCount++;
+    else movedCount++;
+  }
+
+  const foundRolls = new Set(students.map((s) => s.roll));
+  for (const roll of byRoll.keys()) {
+    if (!foundRolls.has(roll)) skipped.push({ roll, reason: "student not found" });
+  }
+
+  return { movedCount, keptBothCount, skipped };
+}
+
 /**
  * Best-effort section for a student whose section column is empty, worked out
  * from the courses they're actually registered for matched against

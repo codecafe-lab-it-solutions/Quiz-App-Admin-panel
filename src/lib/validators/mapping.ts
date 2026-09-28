@@ -23,6 +23,19 @@ export const branchSemOptionsQuerySchema = z.object({
   subCode: z.string().trim().min(1, "Course is required"),
 });
 
+// Backs the "Split Existing Sections" flow's Course dropdown - scoped to
+// whichever faculty was picked (courses they already have a real mapping row
+// for), never the full catalog.
+export const facultyCoursesQuerySchema = z.object({
+  facRoll: z.string().trim().min(1, "Faculty is required"),
+});
+
+// Backs the same flow's existing-sections roster picker, once a course is
+// picked.
+export const splitCandidatesQuerySchema = z.object({
+  subCode: z.string().trim().min(1, "Course is required"),
+});
+
 // No `.refine` requiring roll/courseCode - when neither is given, the route
 // returns a bounded "recently registered" default list instead of erroring,
 // so the page shows real data immediately rather than only after a search.

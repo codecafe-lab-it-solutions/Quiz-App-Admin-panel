@@ -666,6 +666,54 @@ export async function deleteFacultyCourseMapping(id: number): Promise<void> {
   await prisma.isrSubAvailableTbl.delete({ where: { id } });
 }
 
+// Creates a brand-new section for a faculty+course pair by hand-picking
+// students out of that course's existing sections (the "Split Existing
+// Sections" flow on the admin Sections page), rather than deriving the
+// section from a real branch/semester. Deliberately does NOT go through
+// createFacultyCourseMapping/isFacultyMappedToCourse - that check is "one
+// mapping row per (facRoll, subCode, subList)", which would wrongly block a
+// faculty who already teaches this course from owning a second, smaller
+// section of it (exactly the case this feature exists for). The only
+// uniqueness this enforces is the section NAME itself, since that's the
+// real identity a section has.
+export async function createSplitSectionMapping(data: {
+  facRoll: string;
+  subCode: string;
+  subList: string;
+  sectionName: string;
+}): Promise<FacultyCourseMapping> {
+  const faculty = await prisma.isrFacultyTbl.findUnique({ where: { roll: data.facRoll } });
+  if (!faculty) throw new ApiError(404, "No faculty found for this roll number");
+
+  const nameTaken = await prisma.isrSubAvailableTbl.findFirst({
+    where: { subList: data.subList, section: data.sectionName },
+  });
+  if (nameTaken) throw new ApiError(409, `A section named "${data.sectionName}" already exists this cycle`);
+
+  const row = await prisma.isrSubAvailableTbl.create({
+    data: {
+      subList: data.subList,
+      subCode: data.subCode,
+      facRoll: data.facRoll,
+      branch: null,
+      sem: null,
+      section: data.sectionName,
+    },
+  });
+
+  return {
+    id: row.id,
+    sem: "",
+    subList: data.subList,
+    subCode: data.subCode,
+    facRoll: data.facRoll,
+    facultyName: faculty.name,
+    branch: "",
+    major: "",
+    section: row.section,
+  };
+}
+
 export interface SectionSummary {
   name: string;
   major: string;
@@ -680,13 +728,32 @@ export interface SectionSummary {
   }[];
 }
 
+// Exact-match WHERE clause for a single section name inside a comma-joined
+// isr_stu_main_tbl.section column (e.g. "PE_3,PE_5") - a plain `contains`
+// would wrongly match "PE_3" against a stored "PE_30". Mirrors
+// section-sync.ts's sectionNameWhere, duplicated locally (not imported) since
+// section-sync.ts already imports from this file and importing back would be
+// circular.
+function sectionTagWhere(name: string) {
+  return {
+    OR: [
+      { section: { equals: name } },
+      { section: { startsWith: `${name},` } },
+      { section: { endsWith: `,${name}` } },
+      { section: { contains: `,${name},` } },
+    ],
+  };
+}
+
 // Section-first view over the same isr_sub_available_tbl rows the Faculty <->
 // Course mapping page manages - grouped by section name (a section is real
 // data only, never typed: every row that resolves to the same Major_Semester
 // is the same section, whichever course/faculty it happens to be under).
 // studentCount is the real isr_stu_main_tbl membership for that major+sem,
-// same live-derivation the quiz section picker uses (see section-sync.ts) -
-// not a cached count.
+// same live-derivation the quiz section picker uses (see section-sync.ts) for
+// a real branch-derived section - or the section tag itself for a
+// split-created one with no branch/sem (see sectionTagWhere above) - not a
+// cached count either way.
 export async function getAllSections(subList: string): Promise<SectionSummary[]> {
   const rows = await prisma.isrSubAvailableTbl.findMany({
     where: { subList, section: { not: null }, subCode: { not: null }, facRoll: { not: null } },
@@ -728,8 +795,16 @@ export async function getAllSections(subList: string): Promise<SectionSummary[]>
 
   const entries = [...bySection.entries()];
   const counts = await Promise.all(
-    entries.map(([, v]) =>
-      prisma.isrStuMainTbl.count({ where: { major: v.major, semNow: Number(v.sem) } }),
+    entries.map(([name, v]) =>
+      // A split-created section (see createSplitSectionMapping) has no real
+      // branch/sem of its own - major+semNow can't derive its membership, so
+      // fall back to the real membership source, the section tag itself
+      // (isr_stu_main_tbl.section), matching what getStudentsForRealSections
+      // actually checks. A branch-derived section keeps the original
+      // major+semNow count unchanged.
+      v.major
+        ? prisma.isrStuMainTbl.count({ where: { major: v.major, semNow: Number(v.sem) } })
+        : prisma.isrStuMainTbl.count({ where: sectionTagWhere(name) }),
     ),
   );
 
@@ -742,6 +817,38 @@ export async function getAllSections(subList: string): Promise<SectionSummary[]>
       courses: v.courses,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export interface ExistingCourseSection {
+  section: string;
+  facRoll: string;
+  facultyName: string | null;
+}
+
+// Every distinct real section this one course is currently split across
+// (any faculty), for the "Split Existing Sections" flow's roster picker -
+// the admin needs to see and pick from ALL of a course's sections, not just
+// the one belonging to whichever faculty they're creating the new section
+// for.
+export async function getExistingSectionsForCourse(subCode: string, subList: string): Promise<ExistingCourseSection[]> {
+  const rows = await prisma.isrSubAvailableTbl.findMany({
+    where: { subCode, subList, section: { not: null }, facRoll: { not: null } },
+  });
+  if (rows.length === 0) return [];
+
+  const facultyRolls = [...new Set(rows.map((r) => r.facRoll!))];
+  const facultyRows = await prisma.isrFacultyTbl.findMany({ where: { roll: { in: facultyRolls } } });
+  const facultyNameByRoll = new Map(facultyRows.map((f) => [f.roll, f.name]));
+
+  const seen = new Set<string>();
+  const results: ExistingCourseSection[] = [];
+  for (const row of rows) {
+    const name = row.section!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    results.push({ section: name, facRoll: row.facRoll!, facultyName: facultyNameByRoll.get(row.facRoll!) ?? null });
+  }
+  return results.sort((a, b) => a.section.localeCompare(b.section));
 }
 
 // Real course catalog for the "Add Mapping" course picker - a proper union
