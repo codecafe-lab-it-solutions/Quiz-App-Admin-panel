@@ -102,6 +102,22 @@ interface SplitMoveResult {
   skipped: { roll: string; reason: string }[];
 }
 
+interface SplitSubmitResult {
+  subCode: string;
+  moveResult: SplitMoveResult;
+}
+
+// One course being added to the new section in "Split Existing Sections"
+// mode - a section is usually mapped to several courses at once (same "one
+// name, several course rows" shape every other section already has), so the
+// admin can add more than one here, each with its own student picks.
+interface SplitCourseBlock {
+  subCode: string;
+  courseLabel: string;
+  // roll -> which existing section that student is being pulled out of.
+  selections: Map<string, string>;
+}
+
 const fetcher = (url: string) => apiClient.get<ListResponse>(url);
 const facultyFetcher = (url: string) => apiClient.get<{ items: FacultyOption[] }>(url);
 const courseFetcher = (url: string) => apiClient.get<{ items: CourseOption[] }>(url);
@@ -146,10 +162,12 @@ export default function SectionsPage() {
   const [splitFacRoll, setSplitFacRoll] = useState("");
   const [splitFacLabel, setSplitFacLabel] = useState("");
   const [splitFacSearch, setSplitFacSearch] = useState("");
-  const [splitSubCode, setSplitSubCode] = useState("");
-  const [splitCourseLabel, setSplitCourseLabel] = useState("");
+  // "Add course" picker - its value is only ever transient (picking a course
+  // immediately appends a block below and clears this back to empty), never
+  // itself part of the submitted payload.
+  const [splitCoursePicker, setSplitCoursePicker] = useState("");
   const [splitCourseSearch, setSplitCourseSearch] = useState("");
-  const [splitSelections, setSplitSelections] = useState<Map<string, string>>(new Map());
+  const [splitCourseBlocks, setSplitCourseBlocks] = useState<SplitCourseBlock[]>([]);
 
   const { data, isLoading, mutate } = useSWR("/api/admin/sections", fetcher);
 
@@ -262,8 +280,9 @@ export default function SectionsPage() {
     label: `${f.name} (${f.roll})`,
   }));
 
-  // Split-mode Course dropdown - scoped to courses the picked faculty already
-  // has a real mapping row for, not the full catalog.
+  // Split-mode "Add course" dropdown - scoped to courses the picked faculty
+  // already has a real mapping row for, not the full catalog, and excluding
+  // courses already added below.
   const splitCourseSearchDebounced = useDebouncedValue(splitCourseSearch, 250);
   const { data: splitCourseData, isLoading: splitCourseLoading } = useSWR(
     dialogOpen && mode === "split" && splitFacRoll
@@ -271,7 +290,9 @@ export default function SectionsPage() {
       : null,
     courseFetcher,
   );
+  const addedSubCodes = new Set(splitCourseBlocks.map((b) => b.subCode));
   const splitCourseOptions: SearchableSelectOption[] = (splitCourseData?.items ?? [])
+    .filter((c) => !addedSubCodes.has(c.code))
     .filter((c) =>
       splitCourseSearch.trim()
         ? c.code.toLowerCase().includes(splitCourseSearch.trim().toLowerCase()) ||
@@ -283,29 +304,36 @@ export default function SectionsPage() {
       label: c.title === c.code ? c.code : `${c.code} - ${c.title}`,
     }));
 
-  // Every existing section of the picked course, each with its live roster -
-  // the pool this new section's students get hand-picked out of.
-  const { data: splitCandidatesData, isLoading: splitCandidatesLoading } = useSWR(
-    dialogOpen && mode === "split" && splitSubCode
-      ? `/api/admin/sections/split-candidates?subCode=${encodeURIComponent(splitSubCode)}`
-      : null,
-    splitCandidatesFetcher,
-  );
-  const splitSections = splitCandidatesData?.items ?? [];
-
   const existingSectionNames = new Set((data?.items ?? []).map((s) => s.name.toLowerCase()));
   const trimmedSplitSectionName = splitSectionName.trim();
   const splitSectionNameTaken =
     trimmedSplitSectionName.length > 0 && existingSectionNames.has(trimmedSplitSectionName.toLowerCase());
 
-  const toggleSplitStudent = (roll: string, section: string) => {
-    setSplitSelections((prev) => {
-      const next = new Map(prev);
-      if (next.get(roll) === section) next.delete(roll);
-      else next.set(roll, section);
-      return next;
-    });
+  const addSplitCourse = (subCode: string, courseLabel: string) => {
+    setSplitCourseBlocks((prev) =>
+      prev.some((b) => b.subCode === subCode) ? prev : [...prev, { subCode, courseLabel, selections: new Map() }],
+    );
+    setSplitCoursePicker("");
+    setSplitCourseSearch("");
   };
+
+  const removeSplitCourse = (subCode: string) => {
+    setSplitCourseBlocks((prev) => prev.filter((b) => b.subCode !== subCode));
+  };
+
+  const toggleSplitStudent = (subCode: string, roll: string, section: string) => {
+    setSplitCourseBlocks((prev) =>
+      prev.map((b) => {
+        if (b.subCode !== subCode) return b;
+        const next = new Map(b.selections);
+        if (next.get(roll) === section) next.delete(roll);
+        else next.set(roll, section);
+        return { ...b, selections: next };
+      }),
+    );
+  };
+
+  const totalSplitSelections = splitCourseBlocks.reduce((sum, b) => sum + b.selections.size, 0);
 
   const onSplitSubmit = async () => {
     if (!trimmedSplitSectionName) {
@@ -320,31 +348,41 @@ export default function SectionsPage() {
       toast.error("Faculty is required");
       return;
     }
-    if (!splitSubCode) {
-      toast.error("Course is required");
-      return;
-    }
-    if (splitSelections.size === 0) {
-      toast.error("Pick at least one student to move");
+    const courses = splitCourseBlocks
+      .filter((b) => b.selections.size > 0)
+      .map((b) => ({
+        subCode: b.subCode,
+        moves: [...b.selections.entries()].map(([roll, fromSection]) => ({ roll, fromSection })),
+      }));
+    if (courses.length === 0) {
+      toast.error("Add at least one course and pick at least one student for it");
       return;
     }
 
     setSubmitting(true);
     try {
-      const moves = [...splitSelections.entries()].map(([roll, fromSection]) => ({ roll, fromSection }));
-      const result = await apiClient.post<{ moveResult: SplitMoveResult }>("/api/admin/sections/split", {
+      const result = await apiClient.post<{ results: SplitSubmitResult[] }>("/api/admin/sections/split", {
         facRoll: splitFacRoll,
-        subCode: splitSubCode,
         sectionName: trimmedSplitSectionName,
-        moves,
+        courses,
       });
-      const { movedCount, keptBothCount, skipped } = result.moveResult;
-      const parts = [`${movedCount} student${movedCount === 1 ? "" : "s"} moved`];
-      if (keptBothCount > 0) {
-        parts.push(`${keptBothCount} kept in their old section too (shared with another course)`);
+      const totals = result.results.reduce(
+        (acc, r) => ({
+          movedCount: acc.movedCount + r.moveResult.movedCount,
+          keptBothCount: acc.keptBothCount + r.moveResult.keptBothCount,
+          skippedCount: acc.skippedCount + r.moveResult.skipped.length,
+        }),
+        { movedCount: 0, keptBothCount: 0, skippedCount: 0 },
+      );
+      const parts = [
+        `mapped to ${result.results.length} course${result.results.length === 1 ? "" : "s"}`,
+        `${totals.movedCount} student${totals.movedCount === 1 ? "" : "s"} moved`,
+      ];
+      if (totals.keptBothCount > 0) {
+        parts.push(`${totals.keptBothCount} kept in their old section too (shared with another course)`);
       }
-      if (skipped.length > 0) {
-        parts.push(`${skipped.length} skipped`);
+      if (totals.skippedCount > 0) {
+        parts.push(`${totals.skippedCount} skipped`);
       }
       toast.success(`Section created — ${parts.join(", ")}`);
       setDialogOpen(false);
@@ -386,10 +424,9 @@ export default function SectionsPage() {
     setSplitFacRoll("");
     setSplitFacLabel("");
     setSplitFacSearch("");
-    setSplitSubCode("");
-    setSplitCourseLabel("");
+    setSplitCoursePicker("");
     setSplitCourseSearch("");
-    setSplitSelections(new Map());
+    setSplitCourseBlocks([]);
     setDialogOpen(true);
   };
 
@@ -800,10 +837,9 @@ export default function SectionsPage() {
                 onValueChange={(v) => {
                   setSplitFacRoll(v);
                   setSplitFacLabel(splitFacOptions.find((o) => o.value === v)?.label ?? v);
-                  setSplitSubCode("");
-                  setSplitCourseLabel("");
+                  setSplitCoursePicker("");
                   setSplitCourseSearch("");
-                  setSplitSelections(new Map());
+                  setSplitCourseBlocks([]);
                 }}
                 options={splitFacOptions}
                 search={splitFacSearch}
@@ -814,33 +850,11 @@ export default function SectionsPage() {
                 emptyText="No faculty found."
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Course</Label>
-              <SearchableSelect
-                value={splitSubCode || null}
-                onValueChange={(v) => {
-                  setSplitSubCode(v);
-                  setSplitCourseLabel(splitCourseOptions.find((o) => o.value === v)?.label ?? v);
-                  setSplitSelections(new Map());
-                }}
-                options={splitCourseOptions}
-                search={splitCourseSearch}
-                onSearchChange={setSplitCourseSearch}
-                placeholder={splitFacRoll ? "Select course" : "Pick a faculty first"}
-                searchPlaceholder="Search course code or title..."
-                loading={splitCourseLoading}
-                disabled={!splitFacRoll}
-                emptyText="This faculty has no courses mapped yet."
-              />
-            </div>
 
-            {splitSubCode && (
+            {splitFacRoll && (
               <div className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
                 <p>
                   <span className="text-muted-foreground">New faculty:</span> {splitFacLabel || "—"}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Course:</span> {splitCourseLabel || "—"}
                 </p>
                 <p>
                   <span className="text-muted-foreground">New section:</span>{" "}
@@ -849,59 +863,49 @@ export default function SectionsPage() {
               </div>
             )}
 
-            {splitSubCode && (
-              <div className="space-y-2">
-                <Label>Pick students out of this course&apos;s existing sections</Label>
-                {splitCandidatesLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading sections...</p>
-                ) : splitSections.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No existing sections found for this course yet.
-                  </p>
-                ) : (
-                  splitSections.map((s) => (
-                    <div key={s.section} className="space-y-1 rounded-md border">
-                      <div className="flex items-center justify-between border-b bg-muted/40 px-2.5 py-1.5 text-xs font-medium">
-                        <span>{s.section}</span>
-                        <span className="text-muted-foreground">
-                          {s.facultyName ?? s.facRoll} · {s.students.length} student
-                          {s.students.length === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <div className="max-h-40 overflow-y-auto">
-                        {s.students.length === 0 ? (
-                          <p className="p-2 text-sm text-muted-foreground">No students in this section.</p>
-                        ) : (
-                          <div className="divide-y">
-                            {s.students.map((st) => (
-                              <div
-                                key={st.roll}
-                                className="flex items-center gap-2.5 p-2 text-sm hover:bg-accent/50"
-                              >
-                                <Checkbox
-                                  checked={splitSelections.get(st.roll) === s.section}
-                                  onCheckedChange={() => toggleSplitStudent(st.roll, s.section)}
-                                />
-                                <span
-                                  onClick={() => toggleSplitStudent(st.roll, s.section)}
-                                  className="min-w-0 flex-1 cursor-pointer"
-                                >
-                                  <span className="block truncate font-medium">{st.name}</span>
-                                  <span className="block truncate text-xs text-muted-foreground">{st.roll}</span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
+            {splitFacRoll && (
+              <div className="space-y-1.5">
+                <Label>Add a course to this section</Label>
+                <SearchableSelect
+                  value={splitCoursePicker || null}
+                  onValueChange={(v) => {
+                    const label = splitCourseOptions.find((o) => o.value === v)?.label ?? v;
+                    addSplitCourse(v, label);
+                  }}
+                  options={splitCourseOptions}
+                  search={splitCourseSearch}
+                  onSearchChange={setSplitCourseSearch}
+                  placeholder="Select course to add"
+                  searchPlaceholder="Search course code or title..."
+                  loading={splitCourseLoading}
+                  emptyText={
+                    addedSubCodes.size > 0 && splitCourseOptions.length === 0
+                      ? "Every course this faculty teaches has been added."
+                      : "This faculty has no courses mapped yet."
+                  }
+                />
                 <p className="text-xs text-muted-foreground">
-                  {splitSelections.size} student{splitSelections.size === 1 ? "" : "s"} will be moved
-                  into the new section on create.
+                  A section is usually mapped to more than one course - add each course this new
+                  section should cover, then pick its students below.
                 </p>
               </div>
+            )}
+
+            {splitCourseBlocks.map((block) => (
+              <SplitCourseSection
+                key={block.subCode}
+                block={block}
+                onToggleStudent={(roll, section) => toggleSplitStudent(block.subCode, roll, section)}
+                onRemove={() => removeSplitCourse(block.subCode)}
+              />
+            ))}
+
+            {splitCourseBlocks.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {totalSplitSelections} student{totalSplitSelections === 1 ? "" : "s"} across{" "}
+                {splitCourseBlocks.length} course{splitCourseBlocks.length === 1 ? "" : "s"} will be
+                moved into the new section on create.
+              </p>
             )}
           </div>
           )}
@@ -921,6 +925,90 @@ export default function SectionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// One course block inside "Split Existing Sections" mode - fetches and
+// renders that course's existing sections/rosters on its own (rather than
+// the parent fetching once per added course inline), so adding/removing
+// courses is just array state, not a variable number of parent-level hook
+// calls.
+function SplitCourseSection({
+  block,
+  onToggleStudent,
+  onRemove,
+}: {
+  block: SplitCourseBlock;
+  onToggleStudent: (roll: string, section: string) => void;
+  onRemove: () => void;
+}) {
+  const { data, isLoading } = useSWR(
+    `/api/admin/sections/split-candidates?subCode=${encodeURIComponent(block.subCode)}`,
+    splitCandidatesFetcher,
+  );
+  const sections = data?.items ?? [];
+
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium">{block.courseLabel}</p>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-xs font-medium text-destructive hover:underline"
+        >
+          Remove
+        </button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading sections...</p>
+      ) : sections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No existing sections found for this course yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {sections.map((s) => (
+            <div key={s.section} className="space-y-1 rounded-md border">
+              <div className="flex items-center justify-between border-b bg-muted/40 px-2.5 py-1.5 text-xs font-medium">
+                <span>{s.section}</span>
+                <span className="text-muted-foreground">
+                  {s.facultyName ?? s.facRoll} · {s.students.length} student
+                  {s.students.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="max-h-40 overflow-y-auto">
+                {s.students.length === 0 ? (
+                  <p className="p-2 text-sm text-muted-foreground">No students in this section.</p>
+                ) : (
+                  <div className="divide-y">
+                    {s.students.map((st) => (
+                      <div
+                        key={st.roll}
+                        className="flex items-center gap-2.5 p-2 text-sm hover:bg-accent/50"
+                      >
+                        <Checkbox
+                          checked={block.selections.get(st.roll) === s.section}
+                          onCheckedChange={() => onToggleStudent(st.roll, s.section)}
+                        />
+                        <span
+                          onClick={() => onToggleStudent(st.roll, s.section)}
+                          className="min-w-0 flex-1 cursor-pointer"
+                        >
+                          <span className="block truncate font-medium">{st.name}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{st.roll}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {block.selections.size} student{block.selections.size === 1 ? "" : "s"} selected for this course.
+      </p>
     </div>
   );
 }

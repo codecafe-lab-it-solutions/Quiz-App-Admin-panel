@@ -666,17 +666,28 @@ export async function deleteFacultyCourseMapping(id: number): Promise<void> {
   await prisma.isrSubAvailableTbl.delete({ where: { id } });
 }
 
-// Creates a brand-new section for a faculty+course pair by hand-picking
-// students out of that course's existing sections (the "Split Existing
-// Sections" flow on the admin Sections page), rather than deriving the
-// section from a real branch/semester. Deliberately does NOT go through
+// Guards the "Split Existing Sections" flow's section name: it must be a
+// brand-new name, never one already in use by any faculty/course this cycle,
+// since a section's name is its only real identity. Split apart from the row
+// creation below because one new section is usually mapped to SEVERAL
+// courses at once (one isr_sub_available_tbl row each, same section name -
+// the same "one name, many course rows" shape every other section already
+// has) - this only needs to run once per submission, not once per course.
+export async function ensureSectionNameAvailable(sectionName: string, subList: string): Promise<void> {
+  const nameTaken = await prisma.isrSubAvailableTbl.findFirst({
+    where: { subList, section: sectionName },
+  });
+  if (nameTaken) throw new ApiError(409, `A section named "${sectionName}" already exists this cycle`);
+}
+
+// Creates one faculty+course row for a "Split Existing Sections" section
+// (call once per course being added to the new section, after
+// ensureSectionNameAvailable). Deliberately does NOT go through
 // createFacultyCourseMapping/isFacultyMappedToCourse - that check is "one
 // mapping row per (facRoll, subCode, subList)", which would wrongly block a
 // faculty who already teaches this course from owning a second, smaller
-// section of it (exactly the case this feature exists for). The only
-// uniqueness this enforces is the section NAME itself, since that's the
-// real identity a section has.
-export async function createSplitSectionMapping(data: {
+// section of it (exactly the case this feature exists for).
+export async function createSectionMappingRow(data: {
   facRoll: string;
   subCode: string;
   subList: string;
@@ -684,11 +695,6 @@ export async function createSplitSectionMapping(data: {
 }): Promise<FacultyCourseMapping> {
   const faculty = await prisma.isrFacultyTbl.findUnique({ where: { roll: data.facRoll } });
   if (!faculty) throw new ApiError(404, "No faculty found for this roll number");
-
-  const nameTaken = await prisma.isrSubAvailableTbl.findFirst({
-    where: { subList: data.subList, section: data.sectionName },
-  });
-  if (nameTaken) throw new ApiError(409, `A section named "${data.sectionName}" already exists this cycle`);
 
   const row = await prisma.isrSubAvailableTbl.create({
     data: {

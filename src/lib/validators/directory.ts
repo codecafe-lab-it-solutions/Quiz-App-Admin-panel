@@ -76,21 +76,28 @@ export const sectionCreateSchema = z.object({
 });
 
 // "Split Existing Sections" flow: a brand-new section, named directly rather
-// than derived from branch/semester, formed by hand-picking students out of
-// this course's other existing sections. Each move records which section a
-// student is being pulled out of, since isr_stu_main_tbl.section is a
-// comma-list a student can have several entries in - the API needs to know
-// exactly which one to remove.
+// than derived from branch/semester, mapped to one or more courses at once -
+// same "one section name, several course rows" shape every other section
+// already has. Each course carries its own list of moves (which students,
+// and which existing section each is being pulled out of - a student can
+// have several section tags at once, so the API needs to know exactly which
+// one to remove for that course).
 export const sectionSplitSchema = z.object({
   facRoll: z.string().trim().min(1, "Faculty roll is required"),
-  subCode: z.string().trim().min(1, "Course code is required"),
   sectionName: z.string().trim().min(1, "Section name is required"),
-  moves: z
+  courses: z
     .array(
       z.object({
-        roll: z.string().trim().min(1),
-        fromSection: z.string().trim().min(1),
+        subCode: z.string().trim().min(1, "Course code is required"),
+        moves: z
+          .array(
+            z.object({
+              roll: z.string().trim().min(1),
+              fromSection: z.string().trim().min(1),
+            }),
+          )
+          .min(1, "Pick at least one student to move"),
       }),
     )
-    .min(1, "Pick at least one student to move"),
+    .min(1, "Pick at least one course"),
 });
