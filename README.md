@@ -1,4 +1,4 @@
-# Quiz & Attendance Management System
+# RGIPT LMS (Quiz & Attendance)
 
 A Next.js (App Router) + MySQL + Prisma application providing a full Admin Panel and the complete
 Authentication / Admin / Faculty / Student REST API surface for a quiz-based attendance system.
