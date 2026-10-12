@@ -88,6 +88,7 @@ interface AttemptEntry {
   allotmentStatus: "allotted" | "attempted" | "absent";
   isProxy: boolean;
   bypassLocation: boolean;
+  markedPresentByFaculty?: boolean;
   attempt: {
     status: "in_progress" | "submitted" | "auto_submitted";
     startTime: string;
@@ -255,6 +256,7 @@ export function QuizManagement({
           notAttemptedCount: number;
           absentCount: number;
           proxyCount?: number;
+          markedPresentCount?: number;
           declaredCount: number;
           publishedCount: number;
           ungradedCount: number;
@@ -275,6 +277,7 @@ export function QuizManagement({
           name: string;
           attendanceStatus: string;
           isProxy?: boolean;
+          markedPresentByFaculty?: boolean;
           attemptStatus: string | null;
           marksObtained: number;
           percentage: number;
@@ -853,6 +856,7 @@ export function QuizManagement({
 
       {quiz.status === "live" && (
         <LiveMonitoringCard
+          quizId={quizId}
           data={attemptsData}
           onToggleProxy={handleToggleProxy}
           onToggleLocationBypass={handleToggleLocationBypass}
@@ -1302,12 +1306,14 @@ function attemptStatusVariant(
 }
 
 function LiveMonitoringCard({
+  quizId,
   data,
   onToggleProxy,
   onToggleLocationBypass,
   onReopenAttempt,
   onMarkPresent,
 }: {
+  quizId: number;
   data: AttemptsResponse | undefined;
   onToggleProxy: (roll: string, currentlyProxy: boolean) => void;
   onToggleLocationBypass: (roll: string, currentlyBypassed: boolean) => void;
@@ -1315,13 +1321,15 @@ function LiveMonitoringCard({
   onMarkPresent: (roll: string, undo: boolean) => void;
 }) {
   const [page, setPage] = useState(1);
-  const [view, setView] = useState<"all" | "proxy">("all");
+  const [view, setView] = useState<"all" | "proxy" | "manual">("all");
   const entries = [
     ...(data?.attempted ?? []),
     ...(data?.notAttempted ?? []),
   ].sort((a, b) => a.student.name.localeCompare(b.student.name));
   const proxyEntries = entries.filter((e) => e.isProxy);
-  const shownEntries = view === "proxy" ? proxyEntries : entries;
+  const manualEntries = entries.filter((e) => e.markedPresentByFaculty);
+  const shownEntries =
+    view === "proxy" ? proxyEntries : view === "manual" ? manualEntries : entries;
   const paged = paginateClient(shownEntries, page);
   const inProgressCount = entries.filter(
     (e) => e.attempt?.status === "in_progress",
@@ -1364,12 +1372,38 @@ function LiveMonitoringCard({
           >
             Proxy students ({proxyEntries.length})
           </Button>
+          <Button
+            size="sm"
+            variant={view === "manual" ? "default" : "outline"}
+            onClick={() => {
+              setView("manual");
+              setPage(1);
+            }}
+          >
+            Marked present by faculty ({manualEntries.length})
+          </Button>
+          {manualEntries.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                downloadFile(
+                  `/api/faculty/quiz/${quizId}/marked-present?export=excel`,
+                  `quiz-${quizId}-marked-present.xlsx`,
+                )
+              }
+            >
+              Export list
+            </Button>
+          )}
         </div>
         {shownEntries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {view === "proxy"
               ? "No students are flagged as proxy."
-              : "No students allotted to this quiz yet."}
+              : view === "manual"
+                ? "No students have been marked present by faculty."
+                : "No students allotted to this quiz yet."}
           </p>
         ) : (
           <div className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
@@ -1392,8 +1426,8 @@ function LiveMonitoringCard({
                   {entry.bypassLocation && (
                     <Badge variant="outline">Location bypassed</Badge>
                   )}
-                  {!entry.attempt && entry.allotmentStatus === "attempted" && (
-                    <Badge variant="success">Marked present</Badge>
+                  {entry.markedPresentByFaculty && (
+                    <Badge variant="success">Marked present by faculty (0 marks)</Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1420,7 +1454,7 @@ function LiveMonitoringCard({
                   >
                     {entry.isProxy ? "Remove Proxy" : "Mark Proxy"}
                   </Button>
-                  {!entry.attempt && entry.allotmentStatus === "attempted" && (
+                  {entry.markedPresentByFaculty && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1429,7 +1463,8 @@ function LiveMonitoringCard({
                       Undo Present
                     </Button>
                   )}
-                  {!entry.attempt && entry.allotmentStatus !== "attempted" && (
+                  {!entry.markedPresentByFaculty &&
+                    (!entry.attempt || entry.attempt.status === "in_progress") && (
                     <Button
                       size="sm"
                       variant="secondary"
@@ -1488,6 +1523,7 @@ function ResultsReportCard({
       notAttemptedCount: number;
       absentCount: number;
       proxyCount?: number;
+      markedPresentCount?: number;
       declaredCount: number;
       publishedCount: number;
       ungradedCount: number;
@@ -1508,6 +1544,7 @@ function ResultsReportCard({
       name: string;
       attendanceStatus: string;
       isProxy?: boolean;
+      markedPresentByFaculty?: boolean;
       attemptStatus: string | null;
       marksObtained: number;
       percentage: number;
@@ -1521,6 +1558,7 @@ function ResultsReportCard({
     { label: "Not attempted", value: data.summary.notAttemptedCount },
     { label: "Absent", value: data.summary.absentCount },
     { label: "Proxy", value: data.summary.proxyCount ?? 0 },
+    { label: "Marked present by faculty", value: data.summary.markedPresentCount ?? 0 },
     { label: "Published", value: data.summary.publishedCount },
     { label: "Needs grading", value: data.summary.ungradedCount },
   ];
@@ -1543,6 +1581,9 @@ function ResultsReportCard({
           <div className="flex items-center gap-1">
             <Badge variant="secondary">{row.attendanceStatus}</Badge>
             {row.isProxy && <Badge variant="destructive">Proxy</Badge>}
+            {row.markedPresentByFaculty && (
+              <Badge variant="success">Marked by faculty</Badge>
+            )}
           </div>
         ),
       },

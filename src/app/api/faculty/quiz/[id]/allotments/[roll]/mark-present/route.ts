@@ -4,7 +4,7 @@ import { ok, handleApiError, ApiError } from "@/lib/api-response";
 import { getAuthUser, requireRole } from "@/lib/auth";
 import { idParamSchema } from "@/lib/validators/common";
 import { loadAccessibleQuiz } from "@/lib/quiz-access";
-import { clearAttendance, setAttendanceStatus } from "@/lib/attendance-sync";
+import { clearAttendance, markPresentByFaculty, removeManualResult, setAttendanceStatus } from "@/lib/attendance-sync";
 
 async function loadContext(req: NextRequest, params: { id: string; roll: string }) {
   const user = getAuthUser(req);
@@ -24,24 +24,28 @@ async function loadContext(req: NextRequest, params: { id: string; roll: string 
   const attempt = await prisma.quizAttempt.findUnique({
     where: { quizId_studentRoll: { quizId, studentRoll: params.roll } },
   });
-  return { quiz, allotment, attempt };
+  // Faculty rolls are strings; admins have a numeric id, recorded as "admin:<id>".
+  const markedBy = user.role === "admin" ? `admin:${user.sub}` : String(user.sub);
+  return { quiz, allotment, attempt, markedBy };
 }
 
-// Faculty override: marks an allotted student PRESENT without them taking the
-// quiz (e.g. they were in the room but couldn't attempt it). Works while the
-// quiz is live and also after it has been stopped, so a wrongly-absent
-// student can be corrected. Also clears a proxy flag - an explicit "present"
-// from the faculty wins over it. Does not create an attempt or any marks.
+// Faculty/admin override: marks an allotted student PRESENT without them
+// taking the quiz (device problem, but in the room). Works while the quiz is
+// live and also after it has been stopped. The attendance row is flagged
+// (marked_by_faculty, marked_by_roll, marked_at) so these students can be
+// listed/filtered/exported, and the student gets a Result of 0 marks. Also
+// clears a proxy flag - an explicit "present" from the faculty wins over it.
+// A student who really submitted keeps their real result untouched.
 export async function POST(req: NextRequest, { params }: { params: { id: string; roll: string } }) {
   try {
-    const { quiz, allotment } = await loadContext(req, params);
+    const { quiz, allotment, markedBy } = await loadContext(req, params);
 
     const updated = await prisma.$transaction(async (tx) => {
       const next = await tx.quizAllotment.update({
         where: { id: allotment.id },
         data: { status: "attempted", isProxy: false },
       });
-      await setAttendanceStatus(tx, quiz, params.roll, "present");
+      await markPresentByFaculty(tx, quiz, params.roll, markedBy);
       return next;
     });
 
@@ -50,14 +54,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string;
       allotmentStatus: updated.status,
       isProxy: updated.isProxy,
       attendance: "present",
+      markedByFaculty: true,
+      markedBy,
+      marksObtained: 0,
     });
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-// Undoes a manual "mark present". A student who really submitted an attempt
-// stays present - there is nothing to undo.
+// Undoes a manual "mark present" (flag and 0-mark result removed). A student
+// who really submitted an attempt stays present - there is nothing to undo.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string; roll: string } }) {
   try {
     const { quiz, allotment, attempt } = await loadContext(req, params);
@@ -74,6 +81,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       });
       if (completed) await setAttendanceStatus(tx, quiz, params.roll, "absent");
       else await clearAttendance(tx, quiz.id, params.roll);
+      await removeManualResult(tx, quiz.id, params.roll);
       return next;
     });
 
@@ -82,6 +90,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       allotmentStatus: updated.status,
       isProxy: updated.isProxy,
       attendance: completed ? "absent" : null,
+      markedByFaculty: false,
     });
   } catch (error) {
     return handleApiError(error);

@@ -44,9 +44,16 @@ export async function GET(
     });
     const attemptByStudent = new Map(attempts.map((a) => [a.studentRoll, a]));
 
+    const manualMarks = await prisma.attendance.findMany({
+      where: { quizId, markedByFaculty: true },
+      select: { studentRoll: true, markedByRoll: true, markedAt: true },
+    });
+    const manualByStudent = new Map(manualMarks.map((m) => [m.studentRoll, m]));
+
     const attempted = [];
     const notAttempted = [];
     const proxy = [];
+    const markedPresent = [];
 
     for (const allotment of allotments) {
       const attempt = attemptByStudent.get(allotment.studentRoll);
@@ -58,6 +65,9 @@ export async function GET(
         allotmentStatus: allotment.status,
         isProxy: allotment.isProxy,
         bypassLocation: allotment.bypassLocation,
+        markedPresentByFaculty: manualByStudent.has(allotment.studentRoll),
+        markedBy: manualByStudent.get(allotment.studentRoll)?.markedByRoll ?? null,
+        markedAt: manualByStudent.get(allotment.studentRoll)?.markedAt ?? null,
         attempt: attempt ?? null,
       };
       if (attempt) attempted.push(entry);
@@ -65,6 +75,8 @@ export async function GET(
       // Proxy students also stay in attempted/notAttempted above (existing
       // shape, unchanged) - `proxy` is the separate list on top of that.
       if (allotment.isProxy) proxy.push(entry);
+      // Students the faculty marked present by hand (device problem) - 0 marks.
+      if (entry.markedPresentByFaculty) markedPresent.push(entry);
     }
 
     return ok({
@@ -72,6 +84,8 @@ export async function GET(
       attemptedCount: attempted.length,
       notAttemptedCount: notAttempted.length,
       proxyCount: proxy.length,
+      markedPresentCount: markedPresent.length,
+      markedPresent,
       attempted,
       notAttempted,
       proxy,

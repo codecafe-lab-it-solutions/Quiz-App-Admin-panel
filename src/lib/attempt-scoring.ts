@@ -179,7 +179,8 @@ export async function finalizeAttempt(
   const attendanceStatus = isProxy ? "absent" : "present";
   await tx.attendance.upsert({
     where: { studentRoll_quizId: { studentRoll, quizId: quiz.id } },
-    update: { status: attendanceStatus },
+    // A real submission replaces any earlier manual "marked present" flag.
+    update: { status: attendanceStatus, markedByFaculty: false, markedByRoll: null, markedAt: null },
     create: {
       studentRoll,
       courseCode: quiz.courseCode,

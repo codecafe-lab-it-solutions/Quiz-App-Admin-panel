@@ -30,6 +30,8 @@ interface AttendanceRow {
   courseCode: string;
   courseName: string;
   quiz: { title: string; sectionNames: string };
+  markedByFaculty?: boolean;
+  markedByRoll?: string | null;
 }
 
 interface ListResponse<T> {
@@ -51,6 +53,7 @@ export function FacultyAttendance() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [source, setSource] = useState<"all" | "manual">("all");
 
   const buildParams = (extra?: Record<string, string>) => {
     const params = new URLSearchParams({ page: String(page), pageSize: "10" });
@@ -60,6 +63,7 @@ export function FacultyAttendance() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     params.set("sortOrder", sortOrder);
+    if (source === "manual") params.set("markedByFaculty", "true");
     if (extra) Object.entries(extra).forEach(([k, v]) => params.set(k, v));
     return params;
   };
@@ -85,7 +89,16 @@ export function FacultyAttendance() {
     },
     { key: "quiz", header: "Quiz", render: (r) => r.quiz.title },
     { key: "date", header: "Date", render: (r) => format(r.date) },
-    { key: "status", header: "Status", render: (r) => <Badge variant={statusVariant[r.status]}>{r.status}</Badge> },
+    {
+      key: "status",
+      header: "Status",
+      render: (r) => (
+        <div className="flex items-center gap-1">
+          <Badge variant={statusVariant[r.status]}>{r.status}</Badge>
+          {r.markedByFaculty && <Badge variant="outline">Marked by faculty</Badge>}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -147,6 +160,18 @@ export function FacultyAttendance() {
           <div className="space-y-1.5">
             <Label>To</Label>
             <Input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Source</Label>
+            <SearchableSelect
+              value={source}
+              onValueChange={(v) => { setSource(v as "all" | "manual"); setPage(1); }}
+              options={[
+                { value: "all", label: "All attendance" },
+                { value: "manual", label: "Marked present by faculty" },
+              ]}
+              searchPlaceholder="Search..."
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Sort by date</Label>

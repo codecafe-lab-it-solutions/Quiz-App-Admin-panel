@@ -158,7 +158,7 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/attempts",
-            "description": "Every allotted student with their attempt (if any). Returns attempted[] and notAttempted[] (a proxy-flagged student still appears in these) plus a separate proxy[] list and proxyCount for the app's 'Proxy students' screen. Each entry has allotmentStatus - 'attempted' with attempt null means the faculty marked the student present manually (see Mark Present)."
+            "description": "Every allotted student with their attempt (if any). Returns attempted[] and notAttempted[] (a proxy-flagged student still appears in these) plus a separate proxy[] list and proxyCount for the app's 'Proxy students' screen. Each entry has markedPresentByFaculty (true when the faculty marked the student present by hand - see Mark Present), markedBy and markedAt. A separate markedPresent[] list and markedPresentCount are also returned."
           }
         },
         {
@@ -228,7 +228,7 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/mark-present",
             "variable": [{ "key": "roll", "value": "STU001" }],
-            "description": "Faculty override: marks an allotted student PRESENT without an attempt (they are in the room but not taking the quiz). Works while the quiz is live AND after it is stopped, so a wrongly-absent student can be corrected. Clears a proxy flag. Creates no attempt or marks. 400 for a draft/scheduled quiz, 404 if the student isn't allotted or the quiz isn't this faculty's."
+            "description": "Faculty override for a student who is in the class but cannot attempt (device problem). Works while the quiz is live AND after it is stopped. Marks attendance PRESENT, flags the attendance row (marked_by_faculty, marked_by_roll, marked_at) so these students can be filtered/exported, creates a Result of 0 marks (published as 0 with Publish Result), and clears a proxy flag. A student who really submitted keeps their real result. 400 for a draft/scheduled quiz, 404 if the student isn't allotted or the quiz isn't this faculty's."
           }
         },
         {
@@ -237,7 +237,15 @@
             "method": "DELETE",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/mark-present",
             "variable": [{ "key": "roll", "value": "STU001" }],
-            "description": "Undoes a manual Mark Present: back to \"allotted\" while the quiz is live, or \"absent\" once it has been stopped. 400 if the student actually submitted an attempt (they stay present)."
+            "description": "Undoes a manual Mark Present: flag and 0-mark result removed; back to \"allotted\" while the quiz is live, or \"absent\" once it has been stopped. 400 if the student actually submitted an attempt (they stay present)."
+          }
+        },
+        {
+          "name": "List / Export Students Marked Present by Faculty",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/marked-present",
+            "description": "Every student the faculty marked present by hand for this quiz: roll, name, markedBy, markedAt, marksObtained (0), resultStatus. Add ?export=excel to download it as a spreadsheet. The same rows can be filtered in My Attendance with ?markedByFaculty=true."
           }
         },
         {

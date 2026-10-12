@@ -35,6 +35,12 @@ export async function GET(
       throw new ApiError(404, "Quiz not found");
     }
 
+    const manualMarks = await prisma.attendance.findMany({
+      where: { quizId, markedByFaculty: true },
+      select: { studentRoll: true },
+    });
+    const manualRolls = new Set(manualMarks.map((m) => m.studentRoll));
+
     const [allotments, attempts, questions, results] = await Promise.all([
       prisma.quizAllotment.findMany({
         where: { quizId },
@@ -156,6 +162,7 @@ export async function GET(
         name: names.get(allotment.studentRoll) ?? allotment.studentRoll,
         attendanceStatus: allotment.status,
         isProxy: allotment.isProxy,
+        markedPresentByFaculty: manualRolls.has(allotment.studentRoll),
         attemptStatus: attempt?.status ?? null,
         marksObtained,
         percentage,
@@ -188,6 +195,7 @@ export async function GET(
         absentCount: allotments.filter((item) => item.status === "absent")
           .length,
         proxyCount: allotments.filter((item) => item.isProxy).length,
+        markedPresentCount: manualRolls.size,
         declaredCount: results.filter((item) => item.status === "declared")
           .length,
         publishedCount: results.filter((item) => item.status === "published")

@@ -11,6 +11,8 @@ export const attendanceReportQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   export: z.enum(["excel", "pdf"]).optional(),
+  // "true" = only students a faculty/admin marked present by hand.
+  markedByFaculty: z.enum(["true"]).optional(),
 });
 export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
 

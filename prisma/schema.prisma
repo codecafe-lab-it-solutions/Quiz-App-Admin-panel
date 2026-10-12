@@ -595,12 +595,20 @@ model Attendance {
   quizId      Int               @map("quiz_id")
   date        DateTime          @db.Date
   status      AttendanceStatus
+  // Set when a faculty/admin marked this student present by hand (the student
+  // had a device problem and could not attempt the quiz). Such a student has
+  // no attempt and gets a 0-mark Result row. Cleared again if the student then
+  // really submits, or the manual mark is undone / replaced by a proxy flag.
+  markedByFaculty Boolean        @default(false) @map("marked_by_faculty")
+  markedByRoll    String?        @map("marked_by_roll") // faculty roll, or "admin:<id>"
+  markedAt        DateTime?      @map("marked_at")
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   @@unique([studentRoll, quizId])
+  @@index([markedByFaculty])
   @@index([courseCode])
   @@index([studentRoll])
   @@index([date])

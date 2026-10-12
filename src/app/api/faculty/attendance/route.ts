@@ -20,6 +20,8 @@ const querySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   export: z.enum(["excel", "pdf"]).optional(),
+  // "true" = only students a faculty/admin marked present by hand.
+  markedByFaculty: z.enum(["true"]).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -36,6 +38,7 @@ export async function GET(req: NextRequest) {
       },
       ...(query.courseCode ? { courseCode: query.courseCode } : {}),
       ...(query.quizId ? { quizId: query.quizId } : {}),
+      ...(query.markedByFaculty ? { markedByFaculty: true } : {}),
       ...(query.search
         ? {
             OR: [
@@ -76,6 +79,7 @@ export async function GET(req: NextRequest) {
             { key: "quiz", label: "Quiz" },
             { key: "date", label: "Date" },
             { key: "status", label: "Status" },
+            { key: "markedByFaculty", label: "Marked present by faculty" },
           ],
           rows.map((r) => ({
             studentName: names.get(r.studentRoll) ?? r.studentRoll,
@@ -85,6 +89,7 @@ export async function GET(req: NextRequest) {
             quiz: r.quiz.title,
             date: r.date.toISOString().slice(0, 10),
             status: r.status,
+            markedByFaculty: r.markedByFaculty ? `Yes (${r.markedByRoll ?? ""})` : "No",
           })),
           "Attendance",
         );

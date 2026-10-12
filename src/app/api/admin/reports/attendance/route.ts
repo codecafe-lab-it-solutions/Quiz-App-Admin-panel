@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       ...(query.studentRoll?.length
         ? { studentRoll: { in: query.studentRoll } }
         : {}),
+      ...(query.markedByFaculty ? { markedByFaculty: true } : {}),
       ...(query.search
         ? {
             OR: [
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
           { key: "quiz", label: "Quiz" },
           { key: "date", label: "Date" },
           { key: "status", label: "Status" },
+          { key: "markedByFaculty", label: "Marked present by faculty" },
         ],
         rows.map((r) => ({
           studentName: names.get(r.studentRoll) ?? r.studentRoll,
@@ -79,6 +81,7 @@ export async function GET(req: NextRequest) {
           quiz: r.quiz.title,
           date: r.date.toISOString().slice(0, 10),
           status: r.status,
+          markedByFaculty: r.markedByFaculty ? `Yes (${r.markedByRoll ?? ""})` : "No",
         })),
         "Attendance",
       );

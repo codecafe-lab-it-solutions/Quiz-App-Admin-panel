@@ -31,14 +31,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (ungradedCount > 0) {
       throw new ApiError(400, `${ungradedCount} subjective answer(s) still need manual grading before results can be published`);
     }
-    if (attempts.length === 0) {
+
+    // Students the faculty marked present by hand have no attempt - they get a
+    // published result of 0 marks (a student who also has a real attempt is
+    // handled by the attempt path below).
+    const attemptedRolls = new Set(attempts.map((a) => a.studentRoll));
+    const manualRolls = (
+      await prisma.attendance.findMany({
+        where: { quizId, markedByFaculty: true },
+        select: { studentRoll: true },
+      })
+    )
+      .map((m) => m.studentRoll)
+      .filter((roll) => !attemptedRolls.has(roll));
+
+    if (attempts.length === 0 && manualRolls.length === 0) {
       throw new ApiError(400, "No submitted attempts to publish results for");
     }
 
     const publishedAt = new Date();
 
-    const results = await prisma.$transaction(
-      attempts.map((attempt) => {
+    const results = await prisma.$transaction([
+      ...attempts.map((attempt) => {
         const marksObtained = attempt.answers.reduce((sum, a) => sum + a.marksObtained, 0);
         const percentage = quiz.totalMarks > 0 ? (marksObtained / quiz.totalMarks) * 100 : 0;
 
@@ -55,10 +69,25 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             publishedAt,
           },
         });
-      })
-    );
+      }),
+      ...manualRolls.map((studentRoll) =>
+        prisma.result.upsert({
+          where: { quizId_studentRoll: { quizId, studentRoll } },
+          update: { marksObtained: 0, percentage: 0, status: "published", declaredAt: publishedAt, publishedAt },
+          create: {
+            quizId,
+            studentRoll,
+            marksObtained: 0,
+            percentage: 0,
+            status: "published",
+            declaredAt: publishedAt,
+            publishedAt,
+          },
+        }),
+      ),
+    ]);
 
-    return ok({ publishedCount: results.length, results });
+    return ok({ publishedCount: results.length, manualPresentCount: manualRolls.length, results });
   } catch (error) {
     return handleApiError(error);
   }
