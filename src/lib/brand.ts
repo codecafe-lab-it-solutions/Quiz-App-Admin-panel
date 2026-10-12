@@ -2,5 +2,6 @@
 // portal sidebars, browser tab title). Change it here only.
 export const APP_NAME = "RGIPT LMS";
 
-// Institute logo, served from /public. Also the favicon (see app/layout.tsx).
-export const LOGO_PATH = "/images.png";
+// Institute logo (transparent background), served from /public. The favicon and
+// touch icon are src/app/favicon.ico, icon.png and apple-icon.png (Next file convention).
+export const LOGO_PATH = "/logo.png";
