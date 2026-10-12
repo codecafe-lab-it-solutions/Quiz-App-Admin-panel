@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PortalShell } from "@/components/shell/portal-shell";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { ChangePasswordDialog } from "@/components/admin/change-password-dialog";
+import { APP_NAME } from "@/lib/brand";
 import { ADMIN_NAV_GROUPS } from "@/components/admin/admin-nav";
 import { KeyRound } from "lucide-react";
 
@@ -23,7 +24,7 @@ export function AdminShell({ name, email, role, children }: AdminShellProps) {
         name={name}
         email={email}
         roleLabel={role.replace("_", " ")}
-        brandLines={["Quiz & Attendance", "Admin Panel"]}
+        brandLines={[APP_NAME, "Admin Panel"]}
         navGroups={ADMIN_NAV_GROUPS}
         extraMenuItems={
           <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>

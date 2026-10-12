@@ -26,5 +26,5 @@ export function RichTextDisplay({ html, className }: RichTextDisplayProps) {
     });
   }, [html]);
 
-  return <div ref={ref} className={cn("text-sm [&_p]:my-1", className)} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={ref} className={cn("text-sm [&_p]:my-1 [&_img]:inline-block [&_img]:h-auto [&_img]:max-h-64 [&_img]:max-w-full", className)} dangerouslySetInnerHTML={{ __html: html }} />;
 }

@@ -31,7 +31,7 @@ import {
   QuestionRow,
 } from "@/components/quiz/question-editor-dialog";
 import { RichTextDisplay } from "@/components/quiz/rich-text-display";
-import { Copy, Pencil, Play, Plus, Square, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Copy, Pencil, Play, Plus, Smartphone, Square, Trash2, Upload } from "lucide-react";
 
 const CLIENT_PAGE_SIZE = 10;
 
@@ -100,8 +100,10 @@ interface AttemptsResponse {
   totalAllotted: number;
   attemptedCount: number;
   notAttemptedCount: number;
+  proxyCount?: number;
   attempted: AttemptEntry[];
   notAttempted: AttemptEntry[];
+  proxy?: AttemptEntry[];
 }
 
 interface SubjectiveAnswer {
@@ -252,6 +254,7 @@ export function QuizManagement({
           submittedCount: number;
           notAttemptedCount: number;
           absentCount: number;
+          proxyCount?: number;
           declaredCount: number;
           publishedCount: number;
           ungradedCount: number;
@@ -271,6 +274,7 @@ export function QuizManagement({
           roll: string;
           name: string;
           attendanceStatus: string;
+          isProxy?: boolean;
           attemptStatus: string | null;
           marksObtained: number;
           percentage: number;
@@ -412,10 +416,16 @@ export function QuizManagement({
 
   const handleDuplicate = async () => {
     try {
-      const copy = await apiClient.post<{ id: number }>(
+      const copy = await apiClient.post<{ id: number; allottedCount?: number }>(
         `/api/faculty/quiz/${quizId}/duplicate`,
       );
       toast.success("Quiz duplicated");
+      if (!copy.allottedCount) {
+        toast.warning(
+          "No students are allotted to the duplicated quiz. Open Edit Details and allot students before starting it.",
+          { duration: 10000 },
+        );
+      }
       router.push(`${basePath}/${copy.id}`);
     } catch (error) {
       toast.error(
@@ -466,40 +476,7 @@ export function QuizManagement({
 
   const handleDeleteQuestion = async (id: number) => {
     try {
-      // No single-question delete endpoint - re-post the remaining question set.
-      const remaining = quiz.questions.filter((q) => q.id !== id);
-      await apiClient.post(`/api/faculty/quiz/${quizId}/questions`, {
-        questions: remaining.map((q) => {
-          const base = {
-            id: q.id,
-            questionText: q.questionText,
-            marks: q.marks,
-            orderIndex: q.orderIndex,
-          };
-          if (q.questionType === "mcq") {
-            return {
-              ...base,
-              questionType: "mcq",
-              negativeMarks: q.negativeMarks,
-              options: q.options,
-            };
-          }
-          if (q.questionType === "formula") {
-            return {
-              ...base,
-              questionType: "formula",
-              negativeMarks: q.negativeMarks,
-              correctValue: q.formula?.correctValue ?? 0,
-              tolerance: q.formula?.tolerance ?? 0,
-            };
-          }
-          return {
-            ...base,
-            questionType: "subjective",
-            referenceAnswer: q.referenceAnswer ?? undefined,
-          };
-        }),
-      });
+      await apiClient.delete(`/api/faculty/quiz/${quizId}/questions/${id}`);
       toast.success("Question removed");
       mutate();
     } catch (error) {
@@ -593,6 +570,24 @@ export function QuizManagement({
         error instanceof ApiClientError
           ? error.message
           : "Failed to update proxy flag",
+      );
+    }
+  };
+
+  const handleMarkPresent = async (roll: string, undo: boolean) => {
+    try {
+      const url = `/api/faculty/quiz/${quizId}/allotments/${encodeURIComponent(roll)}/mark-present`;
+      if (undo) {
+        await apiClient.delete(url);
+        toast.success(`${roll}'s manual attendance was undone`);
+      } else {
+        await apiClient.post(url);
+        toast.success(`${roll} marked present`);
+      }
+      mutateAttempts();
+    } catch (error) {
+      toast.error(
+        error instanceof ApiClientError ? error.message : "Failed to update attendance",
       );
     }
   };
@@ -782,7 +777,13 @@ export function QuizManagement({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
-            {(quiz.status === "draft" || quiz.status === "scheduled") && (
+            {role === "faculty" && (quiz.status === "draft" || quiz.status === "scheduled" || quiz.status === "live") && (
+              <Badge variant="outline" className="gap-1">
+                <Smartphone className="h-3 w-3" />
+                {quiz.status === "live" ? "Stop" : "Start"} this quiz from the faculty app
+              </Badge>
+            )}
+            {role === "admin" && (quiz.status === "draft" || quiz.status === "scheduled") && (
               <ConfirmDialog
                 trigger={
                   <Button size="sm">
@@ -796,7 +797,7 @@ export function QuizManagement({
                 onConfirm={handleStartQuiz}
               />
             )}
-            {quiz.status === "live" && (
+            {role === "admin" && quiz.status === "live" && (
               <ConfirmDialog
                 trigger={
                   <Button size="sm" variant="destructive">
@@ -838,12 +839,23 @@ export function QuizManagement({
         </CardHeader>
       </Card>
 
+      {allottedCount === 0 && quiz.status !== "completed" && (
+        <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            <span className="font-medium">No students are allotted to this quiz.</span> Use Edit Details to pick the
+            students who should take it - a quiz can't be started until at least one student is allotted.
+          </p>
+        </div>
+      )}
+
       {quiz.status === "live" && (
         <LiveMonitoringCard
           data={attemptsData}
           onToggleProxy={handleToggleProxy}
           onToggleLocationBypass={handleToggleLocationBypass}
           onReopenAttempt={handleReopenAttempt}
+          onMarkPresent={handleMarkPresent}
         />
       )}
 
@@ -916,7 +928,13 @@ export function QuizManagement({
       </Card>
 
       {quiz.status === "completed" && resultsData && (
-        <ResultsReportCard data={resultsData} />
+        <ResultsReportCard
+          data={resultsData}
+          onMarkPresent={async (roll) => {
+            await handleMarkPresent(roll, false);
+            mutateResults();
+          }}
+        />
       )}
 
       {quiz.status === "completed" && (
@@ -1286,18 +1304,23 @@ function LiveMonitoringCard({
   onToggleProxy,
   onToggleLocationBypass,
   onReopenAttempt,
+  onMarkPresent,
 }: {
   data: AttemptsResponse | undefined;
   onToggleProxy: (roll: string, currentlyProxy: boolean) => void;
   onToggleLocationBypass: (roll: string, currentlyBypassed: boolean) => void;
   onReopenAttempt: (roll: string) => void;
+  onMarkPresent: (roll: string, undo: boolean) => void;
 }) {
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<"all" | "proxy">("all");
   const entries = [
     ...(data?.attempted ?? []),
     ...(data?.notAttempted ?? []),
   ].sort((a, b) => a.student.name.localeCompare(b.student.name));
-  const paged = paginateClient(entries, page);
+  const proxyEntries = entries.filter((e) => e.isProxy);
+  const shownEntries = view === "proxy" ? proxyEntries : entries;
+  const paged = paginateClient(shownEntries, page);
   const inProgressCount = entries.filter(
     (e) => e.attempt?.status === "in_progress",
   ).length;
@@ -1318,9 +1341,33 @@ function LiveMonitoringCard({
         </p>
       </CardHeader>
       <CardContent>
-        {entries.length === 0 ? (
+        <div className="mb-3 flex gap-2">
+          <Button
+            size="sm"
+            variant={view === "all" ? "default" : "outline"}
+            onClick={() => {
+              setView("all");
+              setPage(1);
+            }}
+          >
+            All students ({entries.length})
+          </Button>
+          <Button
+            size="sm"
+            variant={view === "proxy" ? "destructive" : "outline"}
+            onClick={() => {
+              setView("proxy");
+              setPage(1);
+            }}
+          >
+            Proxy students ({proxyEntries.length})
+          </Button>
+        </div>
+        {shownEntries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No students allotted to this quiz yet.
+            {view === "proxy"
+              ? "No students are flagged as proxy."
+              : "No students allotted to this quiz yet."}
           </p>
         ) : (
           <div className="max-h-96 space-y-1 overflow-y-auto rounded-md border p-2">
@@ -1342,6 +1389,9 @@ function LiveMonitoringCard({
                   )}
                   {entry.bypassLocation && (
                     <Badge variant="outline">Location bypassed</Badge>
+                  )}
+                  {!entry.attempt && entry.allotmentStatus === "attempted" && (
+                    <Badge variant="success">Marked present</Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -1368,6 +1418,24 @@ function LiveMonitoringCard({
                   >
                     {entry.isProxy ? "Remove Proxy" : "Mark Proxy"}
                   </Button>
+                  {!entry.attempt && entry.allotmentStatus === "attempted" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onMarkPresent(entry.student.roll, true)}
+                    >
+                      Undo Present
+                    </Button>
+                  )}
+                  {!entry.attempt && entry.allotmentStatus !== "attempted" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => onMarkPresent(entry.student.roll, false)}
+                    >
+                      Mark Present
+                    </Button>
+                  )}
                   {entry.attempt?.status === "auto_submitted" && (
                     <Button
                       size="sm"
@@ -1382,7 +1450,7 @@ function LiveMonitoringCard({
             ))}
           </div>
         )}
-        {entries.length > 0 && (
+        {shownEntries.length > 0 && (
           <PaginationBar
             page={page}
             totalPages={paged.totalPages}
@@ -1398,7 +1466,9 @@ function LiveMonitoringCard({
 
 function ResultsReportCard({
   data,
+  onMarkPresent,
 }: {
+  onMarkPresent: (roll: string) => void;
   data: {
     quiz: {
       id: number;
@@ -1415,6 +1485,7 @@ function ResultsReportCard({
       submittedCount: number;
       notAttemptedCount: number;
       absentCount: number;
+      proxyCount?: number;
       declaredCount: number;
       publishedCount: number;
       ungradedCount: number;
@@ -1434,6 +1505,7 @@ function ResultsReportCard({
       roll: string;
       name: string;
       attendanceStatus: string;
+      isProxy?: boolean;
       attemptStatus: string | null;
       marksObtained: number;
       percentage: number;
@@ -1446,6 +1518,7 @@ function ResultsReportCard({
     { label: "Submitted", value: data.summary.submittedCount },
     { label: "Not attempted", value: data.summary.notAttemptedCount },
     { label: "Absent", value: data.summary.absentCount },
+    { label: "Proxy", value: data.summary.proxyCount ?? 0 },
     { label: "Published", value: data.summary.publishedCount },
     { label: "Needs grading", value: data.summary.ungradedCount },
   ];
@@ -1465,7 +1538,10 @@ function ResultsReportCard({
         key: "attendanceStatus",
         header: "Attendance",
         render: (row) => (
-          <Badge variant="secondary">{row.attendanceStatus}</Badge>
+          <div className="flex items-center gap-1">
+            <Badge variant="secondary">{row.attendanceStatus}</Badge>
+            {row.isProxy && <Badge variant="destructive">Proxy</Badge>}
+          </div>
         ),
       },
       {
@@ -1483,6 +1559,21 @@ function ResultsReportCard({
         key: "resultStatus",
         header: "Result",
         render: (row) => <Badge variant="outline">{row.resultStatus}</Badge>,
+      },
+      {
+        key: "actions",
+        header: "",
+        className: "text-right",
+        render: (row) =>
+          row.attendanceStatus === "absent" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onMarkPresent(row.roll)}
+            >
+              Mark Present
+            </Button>
+          ) : null,
       },
     ];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -8,6 +8,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
 import { toast } from "sonner";
 import { MathInline } from "@/components/quiz/math-inline-extension";
+import { QuestionImage } from "@/components/quiz/question-image-extension";
+import { apiClient, ApiClientError } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ import {
   Redo2,
   Sigma,
   Code2,
+  ImagePlus,
 } from "lucide-react";
 
 // MathLive touches `document`/`customElements` at import time, so it's loaded
@@ -81,12 +84,22 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: string;
+  // Shows the "insert image" toolbar button (uploads via the question-image route).
+  allowImages?: boolean;
 }
 
 // Rich text editor for question/option/reference-answer fields - Bold/Italic,
 // alignment, LaTeX equation insertion (rendered with KaTeX), and a raw-HTML
 // source view, matching the legacy panel's question editor.
-export function RichTextEditor({ value, onChange, placeholder, minHeight = "110px" }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  minHeight = "110px",
+  allowImages = false,
+}: RichTextEditorProps) {
+  const [uploading, setUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceHtml, setSourceHtml] = useState(value);
   const [equationOpen, setEquationOpen] = useState(false);
@@ -99,6 +112,7 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = "110p
       TextAlign.configure({ types: ["paragraph"] }),
       Placeholder.configure({ placeholder: placeholder ?? "" }),
       MathInline,
+      QuestionImage,
     ],
     content: value,
     editorProps: {
@@ -133,6 +147,25 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = "110p
     editor.chain().focus().insertMath(equationLatex).insertContent(" ").run();
     setEquationLatex("");
     setEquationOpen(false);
+  };
+
+  const handleImageSelected = async (file: File) => {
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image is too large - the limit is 2 MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { url } = await apiClient.post<{ url: string }>("/api/faculty/uploads/question-image", formData);
+      editor.chain().focus().setQuestionImage(url).run();
+    } catch (error) {
+      toast.error(error instanceof ApiClientError ? error.message : "Image upload failed");
+    } finally {
+      setUploading(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
   };
 
   const closeEquationPopover = (open: boolean) => {
@@ -228,6 +261,26 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = "110p
             </Button>
           </PopoverContent>
         </Popover>
+        {allowImages && (
+          <>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleImageSelected(file);
+              }}
+            />
+            <ToolbarButton
+              onClick={() => imageInputRef.current?.click()}
+              icon={ImagePlus}
+              label={uploading ? "Uploading image..." : "Insert image"}
+              disabled={sourceMode || uploading}
+            />
+          </>
+        )}
         <div className="ml-auto">
           <ToolbarButton onClick={toggleSource} icon={Code2} label="HTML source" active={sourceMode} />
         </div>

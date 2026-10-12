@@ -1,6 +1,7 @@
 "use client";
 
 import { PortalShell } from "@/components/shell/portal-shell";
+import { APP_NAME } from "@/lib/brand";
 import { STUDENT_NAV_GROUPS } from "@/components/student/student-nav";
 
 interface StudentShellProps {
@@ -15,7 +16,7 @@ export function StudentShell({ name, email, children }: StudentShellProps) {
       name={name}
       email={email}
       roleLabel="Student"
-      brandLines={["Quiz & Attendance", "Student Portal"]}
+      brandLines={[APP_NAME, "Student Portal"]}
       navGroups={STUDENT_NAV_GROUPS}
     >
       {children}

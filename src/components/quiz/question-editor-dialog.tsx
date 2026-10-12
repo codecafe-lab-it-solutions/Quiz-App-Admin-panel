@@ -198,7 +198,8 @@ export function QuestionEditorDialog({
             <RichTextEditor
               value={questionText}
               onChange={setQuestionText}
-              placeholder="Supports bold/italic, alignment, and $LaTeX$ equations"
+              placeholder="Supports bold/italic, alignment, images and $LaTeX$ equations"
+              allowImages
             />
           </div>
 
@@ -245,6 +246,7 @@ export function QuestionEditorDialog({
                     }
                     placeholder={`Option ${String.fromCharCode(65 + index)}`}
                     minHeight="60px"
+                    allowImages
                   />
                 </div>
                 <Button

@@ -40,6 +40,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const body = questionsBulkSchema.parse(await req.json());
 
+    // An `id` must belong to THIS quiz - otherwise a crafted payload could
+    // overwrite a question on someone else's quiz.
+    const idsToUpdate = body.questions.flatMap((q) => (q.id ? [q.id] : []));
+    if (idsToUpdate.length > 0) {
+      const owned = await prisma.question.count({ where: { id: { in: idsToUpdate }, quizId } });
+      if (owned !== new Set(idsToUpdate).size) {
+        throw new ApiError(400, "One or more questions do not belong to this quiz");
+      }
+    }
+
     const questions = await prisma.$transaction(async (tx) => {
       const results = [];
 

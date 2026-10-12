@@ -162,21 +162,31 @@ export async function finalizeAttempt(
     },
   });
 
+  // A student the faculty flagged as a proxy always counts as absent (see
+  // QuizAllotment.isProxy) - finishing their attempt must not silently flip
+  // them back to present.
+  const allotment = await tx.quizAllotment.findUnique({
+    where: { quizId_studentRoll: { quizId: quiz.id, studentRoll } },
+    select: { isProxy: true },
+  });
+  const isProxy = allotment?.isProxy === true;
+
   await tx.quizAllotment.update({
     where: { quizId_studentRoll: { quizId: quiz.id, studentRoll } },
-    data: { status: "attempted" },
+    data: { status: isProxy ? "absent" : "attempted" },
   });
 
+  const attendanceStatus = isProxy ? "absent" : "present";
   await tx.attendance.upsert({
     where: { studentRoll_quizId: { studentRoll, quizId: quiz.id } },
-    update: { status: "present" },
+    update: { status: attendanceStatus },
     create: {
       studentRoll,
       courseCode: quiz.courseCode,
       courseName: quiz.courseName,
       quizId: quiz.id,
       date: quiz.startTime,
-      status: "present",
+      status: attendanceStatus,
     },
   });
 

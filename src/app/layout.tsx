@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 import { Toaster } from "sonner";
+import { APP_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Quiz & Attendance Management System",
-  description: "Admin panel for the Quiz & Attendance Management System",
+  title: APP_NAME,
+  description: `${APP_NAME} - quizzes and attendance`,
 };
 
 export default function RootLayout({

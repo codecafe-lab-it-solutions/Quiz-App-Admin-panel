@@ -54,6 +54,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         scoredAnswers,
         totalMarksObtained,
       }),
+      // One upsert per question - leave room beyond Prisma's 5s default so a
+      // slow DB round-trip can't roll a long paper's submit back.
+      { timeout: 30000, maxWait: 10000 },
     );
 
     return ok({

@@ -70,6 +70,25 @@ export function getBearerToken(req: NextRequest): string {
   throw new ApiError(401, "Missing or malformed Authorization header");
 }
 
+// True when the caller authenticated with an `Authorization: Bearer` header
+// (the mobile app) rather than the browser session cookie the web panel uses.
+export function usesBearerAuth(req: NextRequest): boolean {
+  const header = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  return !!header?.startsWith("Bearer ");
+}
+
+// Starting/stopping a quiz is a faculty-app-only action (client requirement):
+// a faculty member's web-panel (cookie) session is refused, while the app
+// (Bearer token) and an admin override are unaffected. Set
+// ALLOW_WEB_QUIZ_CONTROL=true to lift the restriction without a code change.
+export function assertQuizControlAllowed(req: NextRequest, user: AuthTokenPayload): void {
+  if (user.role !== "faculty") return;
+  if (process.env.ALLOW_WEB_QUIZ_CONTROL === "true") return;
+  if (!usesBearerAuth(req)) {
+    throw new ApiError(403, "Quizzes can only be started or stopped from the faculty mobile app");
+  }
+}
+
 export function getAuthUser(req: NextRequest): AuthTokenPayload {
   const token = getBearerToken(req);
   return verifyAccessToken(token);

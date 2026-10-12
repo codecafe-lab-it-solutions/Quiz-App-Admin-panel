@@ -155,6 +155,7 @@ export async function GET(
         roll: allotment.studentRoll,
         name: names.get(allotment.studentRoll) ?? allotment.studentRoll,
         attendanceStatus: allotment.status,
+        isProxy: allotment.isProxy,
         attemptStatus: attempt?.status ?? null,
         marksObtained,
         percentage,
@@ -186,6 +187,7 @@ export async function GET(
         notAttemptedCount: allotments.length - attempts.length,
         absentCount: allotments.filter((item) => item.status === "absent")
           .length,
+        proxyCount: allotments.filter((item) => item.isProxy).length,
         declaredCount: results.filter((item) => item.status === "declared")
           .length,
         publishedCount: results.filter((item) => item.status === "published")

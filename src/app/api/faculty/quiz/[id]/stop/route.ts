@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, handleApiError, ApiError } from "@/lib/api-response";
-import { getAuthUser, requireRole } from "@/lib/auth";
+import { assertQuizControlAllowed, getAuthUser, requireRole } from "@/lib/auth";
 import { idParamSchema } from "@/lib/validators/common";
 import { loadAccessibleQuiz } from "@/lib/quiz-access";
 import { finalizeAttempt, scoreAttemptAnswers } from "@/lib/attempt-scoring";
@@ -12,6 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Stopping a quiz is a faculty action (from the mobile app, on their own
     // quiz) or an admin override; students can never stop one.
     requireRole(user, "faculty", "admin");
+    assertQuizControlAllowed(req, user);
 
     const { id } = idParamSchema.parse(params);
     await loadAccessibleQuiz(user, id);
@@ -104,7 +105,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           });
         }
       }
-    });
+      // Scoring every in-progress attempt (one upsert per answer) for a full
+      // class easily outlasts Prisma's 5s default interactive-transaction
+      // limit, which rolled the whole stop back and left the quiz live.
+    }, { timeout: 120000, maxWait: 10000 });
 
     const updated = await prisma.quiz.findUnique({ where: { id } });
     return ok(updated);

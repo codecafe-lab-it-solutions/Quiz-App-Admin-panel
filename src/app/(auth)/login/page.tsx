@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient, ApiClientError } from "@/lib/api-client";
+import { APP_NAME } from "@/lib/brand";
 import { Eye, EyeOff, GraduationCap } from "lucide-react";
 
 const loginFormSchema = z.object({
@@ -26,6 +27,13 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Sent here by /api/auth/erp-sso when the ERP sign-in link was rejected.
+  useEffect(() => {
+    if (searchParams.get("sso") === "failed") {
+      toast.error("Could not sign you in from the ERP. Please log in with your password.");
+    }
+  }, [searchParams]);
 
   const {
     register,
@@ -85,7 +93,7 @@ function LoginForm() {
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <GraduationCap className="h-6 w-6" />
           </div>
-          <CardTitle className="text-xl">Quiz &amp; Attendance</CardTitle>
+          <CardTitle className="text-xl">{APP_NAME}</CardTitle>
           <CardDescription>Sign in as an admin, faculty member, or student</CardDescription>
         </CardHeader>
         <CardContent>

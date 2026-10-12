@@ -10,8 +10,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     requireRole(user, "faculty", "admin");
 
     const { id } = idParamSchema.parse(params);
-    const source = await prisma.quiz.findUnique({
-      where: { id },
+    const source = await prisma.quiz.findFirst({
+      where: { id, deletedAt: null },
       include: { questions: { include: { options: true, formula: true } } },
     });
     if (!source || (user.role === "faculty" && source.facultyRoll !== String(user.sub))) throw new ApiError(404, "Quiz not found");
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           randomize: source.randomize,
           negativeMarking: source.negativeMarking,
           allowSkipSwitch: source.allowSkipSwitch,
+          requireLocation: source.requireLocation,
           status: "draft",
         },
       });
@@ -72,7 +73,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return newQuiz;
     });
 
-    return created(duplicate);
+    // Students are deliberately NOT copied across (a duplicate is usually for a
+    // different sitting), so say so explicitly - the faculty must allot
+    // students to the copy before it can be started.
+    return created({
+      ...duplicate,
+      allottedCount: 0,
+      warning: "No students are allotted to the duplicated quiz. Allot students before starting it.",
+    });
   } catch (error) {
     return handleApiError(error);
   }

@@ -3,10 +3,10 @@ import { handleApiError } from "@/lib/api-response";
 import { getAuthUser, requireRole } from "@/lib/auth";
 import { buildWorkbookBuffer, excelResponseHeaders } from "@/lib/excel";
 
-// Downloadable .xlsx template for the bulk question import flow. No `Type`
-// column - a row counts as OBJECTIVE if any of OptionA-D or Answer is
-// filled in, SUBJECTIVE if they're all left blank (see
-// /api/faculty/quiz/:id/questions/import for the row rules).
+// Downloadable .xlsx template for the bulk question import flow. `Type` is
+// MCQ or SUBJECTIVE; an MCQ row needs at least OptionA + OptionB and an
+// Answer, and a row with no options is only accepted when Type is SUBJECTIVE
+// (see /api/faculty/quiz/:id/questions/import for the row rules).
 export async function GET(req: NextRequest) {
   try {
     const user = getAuthUser(req);
@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const buffer = buildWorkbookBuffer(
       [
         { key: "Question", label: "Question" },
+        { key: "Type", label: "Type" },
         { key: "OptionA", label: "OptionA" },
         { key: "OptionB", label: "OptionB" },
         { key: "OptionC", label: "OptionC" },
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
       [
         {
           Question: "2 + 2 = ?",
+          Type: "MCQ",
           OptionA: "3",
           OptionB: "4",
           OptionC: "5",
@@ -36,6 +38,7 @@ export async function GET(req: NextRequest) {
         },
         {
           Question: "Explain Newton's second law of motion.",
+          Type: "SUBJECTIVE",
           OptionA: "",
           OptionB: "",
           OptionC: "",

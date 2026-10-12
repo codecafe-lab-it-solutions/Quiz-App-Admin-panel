@@ -46,6 +46,7 @@ export async function GET(
 
     const attempted = [];
     const notAttempted = [];
+    const proxy = [];
 
     for (const allotment of allotments) {
       const attempt = attemptByStudent.get(allotment.studentRoll);
@@ -61,14 +62,19 @@ export async function GET(
       };
       if (attempt) attempted.push(entry);
       else notAttempted.push(entry);
+      // Proxy students also stay in attempted/notAttempted above (existing
+      // shape, unchanged) - `proxy` is the separate list on top of that.
+      if (allotment.isProxy) proxy.push(entry);
     }
 
     return ok({
       totalAllotted: allotments.length,
       attemptedCount: attempted.length,
       notAttemptedCount: notAttempted.length,
+      proxyCount: proxy.length,
       attempted,
       notAttempted,
+      proxy,
     });
   } catch (error) {
     return handleApiError(error);

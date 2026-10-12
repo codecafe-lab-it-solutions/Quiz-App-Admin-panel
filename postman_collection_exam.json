@@ -157,7 +157,8 @@
           "name": "Get Attempts (who has taken it)",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/attempts"
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/attempts",
+            "description": "Every allotted student with their attempt (if any). Returns attempted[] and notAttempted[] (a proxy-flagged student still appears in these) plus a separate proxy[] list and proxyCount for the app's 'Proxy students' screen. Each entry has allotmentStatus - 'attempted' with attempt null means the faculty marked the student present manually (see Mark Present)."
           }
         },
         {
@@ -165,7 +166,7 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/start",
-            "description": "Goes live: flips status from draft/scheduled to live and stamps actualStartTime. Also callable by an admin as an override. 400 if the quiz is already live, 400 if completed (cannot restart), 400 if it has no questions yet, 400 if no students are allotted yet. Only works for a quiz owned by this faculty (404 otherwise) unless called by an admin. Once live, students with an allotment can call Start Attempt below."
+            "description": "APP ONLY for faculty: must be called with the Authorization: Bearer token - a faculty web-panel (cookie) session gets 403. Goes live: flips status from draft/scheduled to live and stamps actualStartTime. Also callable by an admin as an override. 400 if the quiz is already live, 400 if completed (cannot restart), 400 if it has no questions yet, 400 if no students are allotted yet. Only works for a quiz owned by this faculty (404 otherwise) unless called by an admin. Once live, students with an allotment can call Start Attempt below."
           }
         },
         {
@@ -173,7 +174,7 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/stop",
-            "description": "Ends a live quiz: flips status to completed, auto-submits (and scores) every attempt still in_progress using its currently saved answers, then marks every still-\"allotted\" student absent. 400 if the quiz isn't currently \"live\" (already completed, or not started yet) - only a live quiz can be stopped. Only works for a quiz owned by this faculty (404 otherwise). Do this BEFORE Publish Result - publishing requires status completed."
+            "description": "APP ONLY for faculty (Bearer token required, web-panel cookie session gets 403). Ends a live quiz: flips status to completed, auto-submits (and scores) every attempt still in_progress using its currently saved answers, then marks every still-\"allotted\" student absent. 400 if the quiz isn't currently \"live\" (already completed, or not started yet) - only a live quiz can be stopped. Only works for a quiz owned by this faculty (404 otherwise). Do this BEFORE Publish Result - publishing requires status completed."
           }
         },
         {
@@ -209,7 +210,7 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/proxy",
             "variable": [{ "key": "roll", "value": "STU001" }],
-            "description": "Flags someone else appearing to take the exam as that student - a proxy always counts as absent regardless of what's been submitted. Only works for a quiz owned by this faculty."
+            "description": "Flags someone else appearing to take the exam as that student - a proxy always counts as absent regardless of what's been submitted (their attendance row flips to absent immediately, and finishing the attempt afterwards does not flip it back). Only works for a quiz owned by this faculty."
           }
         },
         {
@@ -218,7 +219,25 @@
             "method": "DELETE",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/proxy",
             "variable": [{ "key": "roll", "value": "STU001" }],
-            "description": "Reverts a proxy flag, restoring the student's real status: \"attempted\" if they have a submitted attempt, otherwise back to \"allotted\"."
+            "description": "Reverts a proxy flag, restoring the student's real status: \"attempted\" (present) if they have a submitted attempt, otherwise back to \"allotted\" while the quiz is live, or \"absent\" if the quiz has already been stopped."
+          }
+        },
+        {
+          "name": "Allotment: Mark Present (student not attempting)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/mark-present",
+            "variable": [{ "key": "roll", "value": "STU001" }],
+            "description": "Faculty override: marks an allotted student PRESENT without an attempt (they are in the room but not taking the quiz). Works while the quiz is live AND after it is stopped, so a wrongly-absent student can be corrected. Clears a proxy flag. Creates no attempt or marks. 400 for a draft/scheduled quiz, 404 if the student isn't allotted or the quiz isn't this faculty's."
+          }
+        },
+        {
+          "name": "Allotment: Undo Mark Present",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/allotments/:roll/mark-present",
+            "variable": [{ "key": "roll", "value": "STU001" }],
+            "description": "Undoes a manual Mark Present: back to \"allotted\" while the quiz is live, or \"absent\" once it has been stopped. 400 if the student actually submitted an attempt (they stay present)."
           }
         },
         {
