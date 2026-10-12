@@ -12,7 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GraduationCap, LogOut, Menu, User } from "lucide-react";
+import { BrandLogo } from "@/components/shell/brand-logo";
+import { LogOut, Menu, User } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 
 interface PortalTopbarProps {
@@ -59,9 +60,7 @@ export function PortalTopbar({ name, email, roleLabel, brandLines, onMenuClick, 
       </Button>
 
       <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <GraduationCap className="h-4 w-4" />
-        </div>
+        <BrandLogo className="h-9 w-9 shrink-0" />
         <span className="hidden text-sm font-semibold leading-tight sm:block">
           {brandLines[0]}
           <br />

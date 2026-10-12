@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient, ApiClientError } from "@/lib/api-client";
 import { APP_NAME } from "@/lib/brand";
-import { Eye, EyeOff, GraduationCap } from "lucide-react";
+import { BrandLogo } from "@/components/shell/brand-logo";
+import { Eye, EyeOff } from "lucide-react";
 
 const loginFormSchema = z.object({
   identifier: z.string().trim().min(1, "Enter your roll number, email, or mobile number"),
@@ -90,9 +91,7 @@ function LoginForm() {
     <div className="flex h-full items-center justify-center overflow-y-auto bg-muted/40 px-4 py-8">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <GraduationCap className="h-6 w-6" />
-          </div>
+          <BrandLogo className="mx-auto h-20 w-20" />
           <CardTitle className="text-xl">{APP_NAME}</CardTitle>
           <CardDescription>Sign in as an admin, faculty member, or student</CardDescription>
         </CardHeader>

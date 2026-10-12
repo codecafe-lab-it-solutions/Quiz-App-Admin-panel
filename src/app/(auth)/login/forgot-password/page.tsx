@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandLogo } from "@/components/shell/brand-logo";
 import { ArrowLeft, KeyRound, CheckCircle2 } from "lucide-react";
 
 const requestFormSchema = z.object({
@@ -84,6 +85,7 @@ export default function ForgotPasswordPage() {
     <div className="flex h-full items-center justify-center overflow-y-auto bg-muted/40 px-4 py-8">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-2 text-center">
+          <BrandLogo className="mx-auto h-16 w-16" />
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             {step === "done" ? <CheckCircle2 className="h-6 w-6" /> : <KeyRound className="h-6 w-6" />}
           </div>
