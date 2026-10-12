@@ -419,8 +419,10 @@ export function QuizManagement({
       const copy = await apiClient.post<{ id: number; allottedCount?: number }>(
         `/api/faculty/quiz/${quizId}/duplicate`,
       );
-      toast.success("Quiz duplicated");
-      if (!copy.allottedCount) {
+      if (copy.allottedCount) {
+        toast.success(`Quiz duplicated - ${copy.allottedCount} student(s) allotted from the original`);
+      } else {
+        toast.success("Quiz duplicated");
         toast.warning(
           "No students are allotted to the duplicated quiz. Open Edit Details and allot students before starting it.",
           { duration: 10000 },

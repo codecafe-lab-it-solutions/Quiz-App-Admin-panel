@@ -12,7 +12,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { id } = idParamSchema.parse(params);
     const source = await prisma.quiz.findFirst({
       where: { id, deletedAt: null },
-      include: { questions: { include: { options: true, formula: true } } },
+      include: {
+        questions: { include: { options: true, formula: true } },
+        allotments: { select: { studentRoll: true } },
+      },
     });
     if (!source || (user.role === "faculty" && source.facultyRoll !== String(user.sub))) throw new ApiError(404, "Quiz not found");
 
@@ -70,16 +73,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         // subjective: referenceAnswer already copied above, no child rows needed
       }
 
+      // Same students as the source quiz, as fresh "allotted" rows - proxy and
+      // location-bypass flags are per-sitting, so they are NOT carried over.
+      if (source.allotments.length > 0) {
+        await tx.quizAllotment.createMany({
+          data: source.allotments.map((a) => ({
+            quizId: newQuiz.id,
+            studentRoll: a.studentRoll,
+            status: "allotted" as const,
+          })),
+        });
+      }
+
       return newQuiz;
     });
 
-    // Students are deliberately NOT copied across (a duplicate is usually for a
-    // different sitting), so say so explicitly - the faculty must allot
-    // students to the copy before it can be started.
+    // The copy keeps the source quiz's students; warn only when there are none
+    // (i.e. the source itself had nobody allotted).
+    const allottedCount = source.allotments.length;
     return created({
       ...duplicate,
-      allottedCount: 0,
-      warning: "No students are allotted to the duplicated quiz. Allot students before starting it.",
+      allottedCount,
+      ...(allottedCount === 0
+        ? { warning: "No students are allotted to the duplicated quiz. Allot students before starting it." }
+        : {}),
     });
   } catch (error) {
     return handleApiError(error);
