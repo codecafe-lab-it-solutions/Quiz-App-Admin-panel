@@ -49,6 +49,7 @@ export async function POST(
       Number(quiz.building.latitude),
       Number(quiz.building.longitude),
       quiz.building.radiusMeters,
+      body.accuracyMeters,
     );
 
     await prisma.geofenceLog.create({

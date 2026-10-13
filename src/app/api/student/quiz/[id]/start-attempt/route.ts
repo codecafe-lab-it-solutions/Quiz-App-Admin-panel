@@ -87,6 +87,7 @@ export async function POST(
         Number(quiz.building.latitude),
         Number(quiz.building.longitude),
         quiz.building.radiusMeters,
+        body.accuracyMeters,
       );
 
       if (!isWithinRange) {
@@ -102,7 +103,7 @@ export async function POST(
         });
         throw new ApiError(
           403,
-          `You must be within ${quiz.building.radiusMeters}m of ${quiz.building.name} to start this quiz`,
+          `You must be within ${quiz.building.radiusMeters}m of ${quiz.building.name} to start this quiz (you appear to be about ${Math.round(distanceMeters)}m away - move closer or turn on precise location and try again)`,
         );
       }
 
