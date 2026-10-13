@@ -326,7 +326,7 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/student/attempt/{{attemptId}}/questions",
-            "description": "Returns questions in the randomized/fixed order fixed at Start Attempt, with MCQ options but never the correct answer or reference answer. Also returns myAnswer if this question was already saved (so a resumed/refreshed exam restores state)."
+            "description": "Returns questions in the randomized/fixed order fixed at Start Attempt, with MCQ options but never the correct answer or reference answer. Also returns myAnswer if this question was already saved (so a resumed/refreshed exam restores state). questionText and each optionText are HTML: equations arrive as <span data-type=\"math-inline\" data-latex=\"...\"> with the rendered MathML already inside (data-latex is kept for clients that render LaTeX themselves) - show the HTML in a web view; do not strip tags."
           }
         },
         {

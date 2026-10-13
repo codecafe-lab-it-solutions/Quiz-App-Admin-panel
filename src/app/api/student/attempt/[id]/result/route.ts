@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ok, handleApiError, ApiError } from "@/lib/api-response";
 import { getAuthUser, requireRole } from "@/lib/auth";
 import { idParamSchema } from "@/lib/validators/common";
+import { renderMathInHtml } from "@/lib/math-html";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
         return {
           id: question.id,
-          questionText: question.questionText,
+          questionText: renderMathInHtml(question.questionText),
           questionType: question.questionType,
           marks: question.marks,
           negativeMarks: question.negativeMarks,
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             question.questionType === "mcq"
               ? (optionsByQuestion.get(qid) ?? []).map((o) => ({
                   id: o.id,
-                  optionText: o.optionText,
+                  optionText: renderMathInHtml(o.optionText),
                   isCorrect: o.isCorrect,
                 }))
               : undefined,

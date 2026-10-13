@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { toast } from "sonner";
 import { apiClient, ApiClientError, downloadFile } from "@/lib/api-client";
 import { formatDateTime, toLocalDateTimeInputValue } from "@/lib/format-date";
+import { DEFAULT_WINDOW_MINUTES, addMinutes, minutesBetween } from "@/lib/quiz-time";
 import { dedupeByCourseCode, hasRealTitle } from "@/lib/course-catalog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -176,6 +177,25 @@ export function QuizManagement({
     allowSkipSwitch: true,
     requireLocation: true,
   });
+  // Duration follows end - start until the faculty member types one themselves.
+  const [editDurationTouched, setEditDurationTouched] = useState(false);
+  const changeEditStart = (value: string) =>
+    setEditForm((f) => {
+      // Moving the start carries the end along with it (same window length), so
+      // the end can never be left before the start. Fall back to the default
+      // window when there is no valid existing one to preserve.
+      const windowMinutes = minutesBetween(f.startTime, f.endTime) ?? DEFAULT_WINDOW_MINUTES;
+      return { ...f, startTime: value, endTime: addMinutes(value, windowMinutes) || f.endTime };
+    });
+  const changeEditEnd = (value: string) =>
+    setEditForm((f) => {
+      const minutes = minutesBetween(f.startTime, value);
+      return {
+        ...f,
+        endTime: value,
+        durationMinutes: !editDurationTouched && minutes !== null ? String(minutes) : f.durationMinutes,
+      };
+    });
   const [editCourseCode, setEditCourseCode] = useState("");
   const [editSectionNames, setEditSectionNames] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -347,6 +367,7 @@ export function QuizManagement({
       allowSkipSwitch: quiz.allowSkipSwitch,
       requireLocation: quiz.requireLocation,
     });
+    setEditDurationTouched(false);
     setEditCourseCode(quiz.courseCode);
     setEditSectionNames(quiz.sectionNames.split(",").filter(Boolean));
     // Clear any unsaved checkbox/search state from a previous time this
@@ -361,6 +382,10 @@ export function QuizManagement({
   const handleSaveDetails = async () => {
     if (!editForm.title.trim()) {
       toast.error("Title is required");
+      return;
+    }
+    if (minutesBetween(editForm.startTime, editForm.endTime) === null) {
+      toast.error("End time must be after start time");
       return;
     }
     const duration = Number(editForm.durationMinutes);
@@ -1090,7 +1115,7 @@ export function QuizManagement({
                   id="edit-start"
                   type="datetime-local"
                   value={editForm.startTime}
-                  onChange={(e) => setEditForm((f) => ({ ...f, startTime: e.target.value }))}
+                  onChange={(e) => changeEditStart(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1099,7 +1124,7 @@ export function QuizManagement({
                   id="edit-end"
                   type="datetime-local"
                   value={editForm.endTime}
-                  onChange={(e) => setEditForm((f) => ({ ...f, endTime: e.target.value }))}
+                  onChange={(e) => changeEditEnd(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -1109,7 +1134,10 @@ export function QuizManagement({
                   type="number"
                   min={1}
                   value={editForm.durationMinutes}
-                  onChange={(e) => setEditForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                  onChange={(e) => {
+                    setEditDurationTouched(true);
+                    setEditForm((f) => ({ ...f, durationMinutes: e.target.value }));
+                  }}
                 />
               </div>
             </div>

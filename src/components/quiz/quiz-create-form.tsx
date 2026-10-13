@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { DEFAULT_WINDOW_MINUTES, addMinutes, minutesBetween, toLocalInputValue } from "@/lib/quiz-time";
 
 interface CourseOption {
   subCode: string;
@@ -41,24 +42,43 @@ interface StudentOption {
 
 const fetcher = <T,>(url: string) => apiClient.get<T>(url);
 
-function toLocalInputValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
   const router = useRouter();
   const [facultyRoll, setFacultyRoll] = useState("");
   const [title, setTitle] = useState("");
   const [courseCode, setCourseCode] = useState("");
   const [buildingId, setBuildingId] = useState("");
-  const [startTime, setStartTime] = useState(
-    toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)),
-  );
-  const [endTime, setEndTime] = useState(
-    toLocalInputValue(new Date(Date.now() + 90 * 60 * 1000)),
-  );
-  const [durationMinutes, setDurationMinutes] = useState("30");
+  // End time follows the start (start + DEFAULT_WINDOW_MINUTES) and duration
+  // follows end - start, until the faculty member edits that field themselves.
+  const [startTime, setStartTime] = useState(() => toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000)));
+  const [endTime, setEndTime] = useState(() => addMinutes(startTime, DEFAULT_WINDOW_MINUTES));
+  const [durationMinutes, setDurationMinutes] = useState(String(DEFAULT_WINDOW_MINUTES));
+  const [endTouched, setEndTouched] = useState(false);
+  const [durationTouched, setDurationTouched] = useState(false);
+
+  const changeStartTime = (value: string) => {
+    setStartTime(value);
+    // A hand-picked end stays put unless the new start has overtaken it.
+    const keepEnd = endTouched && minutesBetween(value, endTime) !== null;
+    const nextEnd = keepEnd ? endTime : addMinutes(value, DEFAULT_WINDOW_MINUTES);
+    if (!keepEnd) setEndTime(nextEnd);
+    if (!durationTouched) {
+      const minutes = minutesBetween(value, nextEnd);
+      if (minutes !== null) setDurationMinutes(String(minutes));
+    }
+  };
+  const changeEndTime = (value: string) => {
+    setEndTime(value);
+    setEndTouched(true);
+    if (!durationTouched) {
+      const minutes = minutesBetween(startTime, value);
+      if (minutes !== null) setDurationMinutes(String(minutes));
+    }
+  };
+  const changeDuration = (value: string) => {
+    setDurationMinutes(value);
+    setDurationTouched(true);
+  };
   const [randomize, setRandomize] = useState(true);
   const [negativeMarking, setNegativeMarking] = useState(true);
   const [allowSkipSwitch, setAllowSkipSwitch] = useState(true);
@@ -199,6 +219,10 @@ export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
     }
     if (!buildingId) {
       toast.error("Select a building");
+      return;
+    }
+    if (minutesBetween(startTime, endTime) === null) {
+      toast.error("End time must be after start time");
       return;
     }
     const duration = Number(durationMinutes);
@@ -363,7 +387,7 @@ export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
               id="startTime"
               type="datetime-local"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={(e) => changeStartTime(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
@@ -372,7 +396,7 @@ export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
               id="endTime"
               type="datetime-local"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
+              onChange={(e) => changeEndTime(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
@@ -382,7 +406,7 @@ export function QuizCreateForm({ role }: { role: "faculty" | "admin" }) {
               type="number"
               min={1}
               value={durationMinutes}
-              onChange={(e) => setDurationMinutes(e.target.value)}
+              onChange={(e) => changeDuration(e.target.value)}
             />
           </div>
         </div>

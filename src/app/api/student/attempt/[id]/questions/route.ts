@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ok, handleApiError, ApiError } from "@/lib/api-response";
 import { getAuthUser, requireRole } from "@/lib/auth";
 import { idParamSchema } from "@/lib/validators/common";
+import { renderMathInHtml } from "@/lib/math-html";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -33,13 +34,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         const existing = answerByQuestion.get(qid);
         return {
           id: q.id,
-          questionText: q.questionText,
+          questionText: renderMathInHtml(q.questionText),
           questionType: q.questionType,
           marks: q.marks,
           negativeMarks: q.negativeMarks,
           orderIndex: index,
           // referenceAnswer is a grading guide - never sent to the student.
-          options: q.questionType === "mcq" ? q.options : undefined,
+          options:
+            q.questionType === "mcq"
+              ? q.options.map((o) => ({ ...o, optionText: renderMathInHtml(o.optionText) }))
+              : undefined,
           myAnswer: existing
             ? {
                 selectedOptionId: existing.selectedOptionId,

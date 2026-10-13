@@ -66,6 +66,15 @@ export async function PATCH(
       if (!faculty) throw new ApiError(404, "No faculty found for this roll number");
     }
 
+    // Create enforces end > start in the schema, but a PATCH carries fields
+    // independently - check the resulting pair so an edit can't leave a quiz
+    // ending before it starts.
+    const effectiveStart = rest.startTime ?? existing.startTime;
+    const effectiveEnd = rest.endTime ?? existing.endTime;
+    if ((rest.startTime || rest.endTime) && effectiveEnd <= effectiveStart) {
+      throw new ApiError(400, "End time must be after start time", { endTime: ["End time must be after start time"] });
+    }
+
     const facultyRoll = rest.facultyRoll ?? existing.facultyRoll;
     const effectiveCourseCode = courseCode ?? existing.courseCode;
     const subList = await getCurrentSubList();
