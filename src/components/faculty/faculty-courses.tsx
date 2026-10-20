@@ -12,10 +12,10 @@ import { Users } from "lucide-react";
 
 const PAGE_SIZE = 10;
 
-function paginate<T>(rows: T[], page: number) {
+function paginate<T>(rows: T[], page: number, pageSize = PAGE_SIZE) {
   const total = rows.length;
-  const start = (page - 1) * PAGE_SIZE;
-  return { items: rows.slice(start, start + PAGE_SIZE), total, totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  const start = (page - 1) * pageSize;
+  return { items: rows.slice(start, start + pageSize), total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 interface FacultyCourse {
@@ -40,6 +40,7 @@ export function FacultyCourses() {
   const [coursesPage, setCoursesPage] = useState(1);
   const [rosterPage, setRosterPage] = useState(1);
   const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterPageSize, setRosterPageSize] = useState(PAGE_SIZE);
 
   const { data: coursesData, isLoading: coursesLoading } = useSWR(`/api/faculty/courses`, (url: string) =>
     apiClient.get<{ items: FacultyCourse[] }>(url)
@@ -62,7 +63,7 @@ export function FacultyCourses() {
         (r) => r.roll.toLowerCase().includes(rosterSearchQuery) || r.name.toLowerCase().includes(rosterSearchQuery)
       )
     : allRoster;
-  const roster = paginate(filteredRoster, rosterPage);
+  const roster = paginate(filteredRoster, rosterPage, rosterPageSize);
 
   const courseColumns: DataTableColumn<FacultyCourse>[] = [
     { key: "subCode", header: "Code", render: (r) => <span className="font-medium">{r.subCode}</span> },
@@ -156,8 +157,12 @@ export function FacultyCourses() {
               page={rosterPage}
               totalPages={roster.totalPages}
               total={roster.total}
-              pageSize={PAGE_SIZE}
+              pageSize={rosterPageSize}
               onPageChange={setRosterPage}
+              onPageSizeChange={(size) => {
+                setRosterPageSize(size);
+                setRosterPage(1);
+              }}
             />
           )}
         </DialogContent>

@@ -14,8 +14,23 @@ const LATEX_ATTR = /\bdata-latex="([^"]*)"/;
 const ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
 const decodeEntities = (s: string) => s.replace(/&(?:amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m]);
 
-export function renderMathInHtml(html: string): string {
-  if (!html || !html.includes("math-inline")) return html;
+// Uploaded question images are stored as a relative src
+// ("/api/uploads/question-images/<uuid>.png"). The web app resolves that against
+// its own origin; the mobile app has none, so the image would not load. Passing
+// the request origin makes the src absolute.
+export function requestOrigin(req: { headers: Headers; nextUrl: { origin: string } }): string {
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (!host) return req.nextUrl.origin;
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? req.nextUrl.origin.split(":")[0];
+  return `${proto}://${host.split(",")[0].trim()}`;
+}
+
+const RELATIVE_IMG_SRC = /(<img\b[^>]*\ssrc=")(\/api\/uploads\/question-images\/)/g;
+
+export function renderMathInHtml(html: string, origin?: string): string {
+  if (!html) return html;
+  if (origin) html = html.replace(RELATIVE_IMG_SRC, `$1${origin}$2`);
+  if (!html.includes("math-inline")) return html;
   return html.replace(MATH_SPAN, (whole, attrs: string) => {
     const match = LATEX_ATTR.exec(attrs);
     if (!match) return whole;

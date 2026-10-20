@@ -9,9 +9,11 @@ interface PaginationBarProps {
   total: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
 }
 
-export function PaginationBar({ page, totalPages, total, pageSize, onPageChange }: PaginationBarProps) {
+export function PaginationBar({ page, totalPages, total, pageSize, onPageChange, onPageSizeChange, pageSizeOptions = [10, 25, 50, 100, 500] }: PaginationBarProps) {
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(total, page * pageSize);
 
@@ -21,6 +23,20 @@ export function PaginationBar({ page, totalPages, total, pageSize, onPageChange 
         {total === 0 ? "No results" : `Showing ${start}-${end} of ${total}`}
       </p>
       <div className="flex items-center gap-2">
+        {onPageSizeChange && (
+          <label className="flex items-center gap-1 text-sm text-muted-foreground">
+            Rows
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <Button
           variant="outline"
           size="sm"

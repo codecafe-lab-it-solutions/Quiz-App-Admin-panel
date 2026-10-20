@@ -200,7 +200,7 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/geofence-check",
-            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}}\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}},\n  \"accuracyMeters\": 25\n}" },
             "description": "Checks the logged-in faculty's current location against the quiz's building radius - same check the student flow uses, but for the faculty invigilating that quiz. Only works for a quiz owned by this faculty (404 otherwise). Returns isWithinRange, distanceMeters, allowedRadiusMeters, buildingName. If the quiz has requireLocation=false, returns isWithinRange: true with skipped: true instead of failing."
           }
         },
@@ -283,7 +283,7 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/student/quizzes?page=1&pageSize=10",
-            "description": "Quizzes allotted to the logged-in student. Copy an `id` from a quiz with status \"live\" into the `quizId` collection variable before starting the exam flow below."
+            "description": "Quizzes allotted to the logged-in student. Each item has myAllotmentStatus, myAttemptStatus and myIsProxy (true when the faculty flagged this student as a proxy - show it on the dashboard; a proxy counts as absent). Copy an `id` from a quiz with status \"live\" into the `quizId` collection variable before starting the exam flow below."
           }
         },
         {
@@ -292,8 +292,8 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{baseUrl}}/api/student/quiz/{{quizId}}/geofence-check",
-            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}}\n}" },
-            "description": "Lets the app warn the student before they commit to starting - the server re-checks location again on Start Attempt regardless."
+            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}},\n  \"accuracyMeters\": 25\n}" },
+            "description": "Lets the app warn the student before they commit to starting - the server re-checks location again on Start Attempt regardless. Send accuracyMeters (the phone's reported GPS accuracy): the server allows radius + max(100 m, min(accuracy, 150 m)). Location is checked ONLY here and at Start Attempt, never during the quiz (Get Attempt Questions, Save Answer and Submit do no location check)."
           }
         },
         {
@@ -317,8 +317,8 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{baseUrl}}/api/student/quiz/{{quizId}}/start-attempt",
-            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}}\n}" },
-            "description": "Fails with 403 if outside the quiz building's geofence radius, 400 if the quiz isn't live, 409 if already attempted. On success, returns attemptId, durationMinutes and totalQuestions - start a countdown timer client-side from durationMinutes."
+            "body": { "mode": "raw", "raw": "{\n  \"latitude\": {{latitude}},\n  \"longitude\": {{longitude}},\n  \"accuracyMeters\": 25\n}" },
+            "description": "Fails with 403 if outside the quiz building's geofence radius (message includes the distance; accuracyMeters widens the allowance), 400 if the quiz isn't live, 409 if already attempted. On success, returns attemptId, durationMinutes and totalQuestions - start a countdown timer client-side from durationMinutes."
           }
         },
         {
@@ -326,7 +326,7 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/student/attempt/{{attemptId}}/questions",
-            "description": "Returns questions in the randomized/fixed order fixed at Start Attempt, with MCQ options but never the correct answer or reference answer. Also returns myAnswer if this question was already saved (so a resumed/refreshed exam restores state). questionText and each optionText are HTML: equations arrive as <span data-type=\"math-inline\" data-latex=\"...\"> with the rendered MathML already inside (data-latex is kept for clients that render LaTeX themselves) - show the HTML in a web view; do not strip tags."
+            "description": "Returns questions in the randomized/fixed order fixed at Start Attempt, with MCQ options but never the correct answer or reference answer. Also returns myAnswer if this question was already saved (so a resumed/refreshed exam restores state). questionText and each optionText are HTML: equations arrive as <span data-type=\"math-inline\" data-latex=\"...\"> with the rendered MathML already inside (data-latex is kept for clients that render LaTeX themselves) - show the HTML in a web view; do not strip tags. Uploaded images are <img> tags whose src is already an absolute URL (no auth header needed)."
           }
         },
         {

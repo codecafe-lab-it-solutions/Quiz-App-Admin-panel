@@ -3,11 +3,12 @@ import { prisma } from "@/lib/db";
 import { ok, handleApiError, ApiError } from "@/lib/api-response";
 import { getAuthUser, requireRole } from "@/lib/auth";
 import { idParamSchema } from "@/lib/validators/common";
-import { renderMathInHtml } from "@/lib/math-html";
+import { renderMathInHtml, requestOrigin } from "@/lib/math-html";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = getAuthUser(req);
+    const origin = requestOrigin(req);
     requireRole(user, "student");
 
     const { id: attemptId } = idParamSchema.parse(params);
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         const existing = answerByQuestion.get(qid);
         return {
           id: q.id,
-          questionText: renderMathInHtml(q.questionText),
+          questionText: renderMathInHtml(q.questionText, origin),
           questionType: q.questionType,
           marks: q.marks,
           negativeMarks: q.negativeMarks,
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           // referenceAnswer is a grading guide - never sent to the student.
           options:
             q.questionType === "mcq"
-              ? q.options.map((o) => ({ ...o, optionText: renderMathInHtml(o.optionText) }))
+              ? q.options.map((o) => ({ ...o, optionText: renderMathInHtml(o.optionText, origin) }))
               : undefined,
           myAnswer: existing
             ? {
