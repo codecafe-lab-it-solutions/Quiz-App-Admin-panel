@@ -174,7 +174,7 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/stop",
-            "description": "APP ONLY for faculty (Bearer token required, web-panel cookie session gets 403). Ends a live quiz: flips status to completed, auto-submits (and scores) every attempt still in_progress using its currently saved answers, then marks every still-\"allotted\" student absent. 400 if the quiz isn't currently \"live\" (already completed, or not started yet) - only a live quiz can be stopped. Only works for a quiz owned by this faculty (404 otherwise). Do this BEFORE Publish Result - publishing requires status completed."
+            "description": "APP ONLY for faculty (Bearer token required, web-panel cookie session gets 403). Ends a live quiz: flips status to completed, auto-submits (and scores) every attempt still in_progress using its currently saved answers, then marks every still-\"allotted\" student absent. 400 if the quiz isn't currently \"live\" (already completed, or not started yet) - only a live quiz can be stopped. Only works for a quiz owned by this faculty (404 otherwise). Do this BEFORE Publish Result - publishing requires status completed. A quiz still live at 7:30 PM IST is stopped automatically by the server in exactly the same way (in-progress attempts auto-submitted with autoSubmitReason \"auto_stopped_730pm\", the rest marked absent), so the app should treat a quiz that turns completed on its own as normal."
           }
         },
         {
