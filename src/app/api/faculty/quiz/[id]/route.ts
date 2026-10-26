@@ -87,7 +87,10 @@ export async function PATCH(
     if (sectionNames) {
       const validSections = await getRealSectionsForFacultyCourse(facultyRoll, effectiveCourseCode, subList);
       const validNames = new Set(validSections.map((s) => s.name));
-      if (sectionNames.some((name) => !validNames.has(name))) {
+      // Sections the quiz already has are kept as-is: the faculty's mapping may
+      // have changed since, and that must not block editing time/marks/etc.
+      const existingNames = new Set(existing.sectionNames.split(",").filter(Boolean));
+      if (sectionNames.some((name) => !validNames.has(name) && !existingNames.has(name))) {
         throw new ApiError(404, "One or more selected sections were not found");
       }
     }
