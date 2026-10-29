@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionsForCourse } from "@/lib/section-options";
 import useSWR from "swr";
 import Link from "next/link";
 import { apiClient, downloadFile } from "@/lib/api-client";
@@ -20,6 +21,7 @@ interface CourseOption {
   name: string;
 }
 interface SectionOption {
+  courseCode: string;
   name: string;
 }
 interface ResultRow {
@@ -185,6 +187,7 @@ export default function AdminResultsPage() {
               value={courseCode}
               onValueChange={(value) => {
                 setCourseCode(value);
+                setSectionName("all");
                 setPage(1);
               }}
               options={[
@@ -208,7 +211,7 @@ export default function AdminResultsPage() {
               }}
               options={[
                 { value: "all", label: "All sections" },
-                ...sectionOptions.map((section) => ({ value: section.name, label: section.name })),
+                ...sectionsForCourse(sectionOptions, courseCode).map((section) => ({ value: section.name, label: section.name })),
               ]}
               searchPlaceholder="Search sections..."
             />

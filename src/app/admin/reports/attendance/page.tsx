@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { sectionsForCourse } from "@/lib/section-options";
 import useSWR from "swr";
 import { apiClient } from "@/lib/api-client";
 import { downloadFile } from "@/lib/api-client";
@@ -26,6 +27,7 @@ interface CourseOption {
   name: string;
 }
 interface SectionOption {
+  courseCode: string;
   name: string;
 }
 interface AttendanceRow {
@@ -170,6 +172,7 @@ export default function AttendanceReportPage() {
               value={courseCode}
               onValueChange={(v) => {
                 setCourseCode(v);
+                setSectionName("all");
                 setPage(1);
               }}
               options={[
@@ -189,7 +192,7 @@ export default function AttendanceReportPage() {
               }}
               options={[
                 { value: "all", label: "All sections" },
-                ...sectionOptions.map((s) => ({ value: s.name, label: s.name })),
+                ...sectionsForCourse(sectionOptions, courseCode).map((s) => ({ value: s.name, label: s.name })),
               ]}
               searchPlaceholder="Search sections..."
             />

@@ -127,9 +127,14 @@ export async function GET(req: NextRequest) {
     const courseOptions = [
       ...new Map(own.map((r) => [r.quiz.courseCode, { code: r.quiz.courseCode, name: r.quiz.courseName }])).values(),
     ];
+    // Each section keeps the course it belongs to so the UI can filter by the selected course.
     const sectionOptions = [
-      ...new Set(own.flatMap((r) => r.quiz.sectionNames.split(",").filter(Boolean))),
-    ].map((name) => ({ name }));
+      ...new Map(
+        own.flatMap((r) =>
+          r.quiz.sectionNames.split(",").filter(Boolean).map((name) => [`${r.quiz.courseCode}|${name}`, { courseCode: r.quiz.courseCode, name }] as const),
+        ),
+      ).values(),
+    ];
 
     return ok({
       items: items.map((item) => ({

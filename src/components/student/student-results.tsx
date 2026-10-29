@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionsForCourse } from "@/lib/section-options";
 import useSWR from "swr";
 import { format, todayInputValue } from "@/lib/format-date";
 import { apiClient, downloadFile } from "@/lib/api-client";
@@ -34,6 +35,7 @@ interface CourseFilterOption {
 }
 
 interface SectionFilterOption {
+  courseCode: string;
   name: string;
 }
 
@@ -128,7 +130,8 @@ export function StudentResults() {
             <Label>Course</Label>
             <SearchableSelect
               value={courseCode}
-              onValueChange={(v) => { setCourseCode(v); setPage(1); }}
+              onValueChange={(v) => { setCourseCode(v);
+                setSectionName("all"); setPage(1); }}
               options={[
                 { value: "all", label: "All courses" },
                 ...filterOptions.courses.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` })),
@@ -143,7 +146,7 @@ export function StudentResults() {
               onValueChange={(v) => { setSectionName(v); setPage(1); }}
               options={[
                 { value: "all", label: "All sections" },
-                ...filterOptions.sections.map((s) => ({ value: s.name, label: s.name })),
+                ...sectionsForCourse(filterOptions.sections, courseCode).map((s) => ({ value: s.name, label: s.name })),
               ]}
               searchPlaceholder="Search sections..."
             />

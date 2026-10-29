@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sectionsForCourse } from "@/lib/section-options";
 import useSWR from "swr";
 import Link from "next/link";
 import { apiClient, downloadFile } from "@/lib/api-client";
@@ -20,6 +21,7 @@ interface CourseFilterOption {
   name: string;
 }
 interface SectionFilterOption {
+  courseCode: string;
   name: string;
 }
 interface ResultRow {
@@ -178,6 +180,7 @@ export function FacultyResults() {
               value={courseCode}
               onValueChange={(value) => {
                 setCourseCode(value);
+                setSectionName("all");
                 setPage(1);
               }}
               options={[
@@ -201,7 +204,7 @@ export function FacultyResults() {
               }}
               options={[
                 { value: "all", label: "All sections" },
-                ...filterOptions.sections.map((section) => ({ value: section.name, label: section.name })),
+                ...sectionsForCourse(filterOptions.sections, courseCode).map((section) => ({ value: section.name, label: section.name })),
               ]}
               searchPlaceholder="Search sections..."
             />

@@ -229,8 +229,8 @@
           "name": "Marks Report (all quizzes in a date range)",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/faculty/reports/marks-matrix?courseCode=&sectionName=&from=2026-08-01&to=2026-10-31&search=",
-            "description": "One row per student, one column per completed quiz between from and to (by quiz start date), plus a Total. Returns quizzes[] (id, title, date, totalMarks), maxTotal and rows[] (roll, name, marks[] aligned with quizzes - a number, \"AB\" for absent, null when not allotted - and total). All filters are optional; search matches student name or roll. Add &export=excel to download the same grid as marks-report.xlsx."
+            "url": "{{baseUrl}}/api/faculty/reports/marks-matrix?courseCode=&sectionNames=PE_3,PE_5&studentRolls=&from=2026-08-01&to=2026-10-31",
+            "description": "One row per student, one column per completed quiz between from and to (by quiz start date), plus a Total. Returns quizzes[] (id, title, date, totalMarks), maxTotal and rows[] (roll, name, totalQuizzes, attended, attendancePercent, marks[] aligned with quizzes - a number, \"AB\" for absent, null when not allotted - and total). All filters are optional. sectionNames and studentRolls are comma-separated lists (a quiz matches if it was offered to any listed section; only the listed students are returned). totalQuizzes = completed quizzes in range the student was allotted, attended = those not marked absent, attendancePercent = attended / totalQuizzes. students[] lists every candidate student for the current course/section/date filters (use it to fill a student picker). Add &export=excel to download the same grid as marks-report.xlsx."
           }
         },
         {

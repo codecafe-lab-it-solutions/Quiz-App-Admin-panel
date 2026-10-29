@@ -8,43 +8,60 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { format } from "@/lib/format-date";
 import { FileSpreadsheet } from "lucide-react";
 
 interface MatrixResponse {
   quizzes: { id: number; title: string; date: string; totalMarks: number }[];
   maxTotal: number;
-  rows: { roll: string; name: string; marks: (number | string | null)[]; total: number }[];
-  filterOptions: { courses: { code: string; name: string }[]; sections: { courseCode: string; name: string }[] };
+  rows: {
+    roll: string;
+    name: string;
+    totalQuizzes: number;
+    attended: number;
+    attendancePercent: number;
+    marks: (number | string | null)[];
+    total: number;
+  }[];
+  students: { roll: string; name: string }[];
+  filterOptions: {
+    courses: { code: string; name: string }[];
+    sections: { courseCode: string; name: string }[];
+  };
 }
 
 const fetcher = (url: string) => apiClient.get<MatrixResponse>(url);
 
 export function MarksReport() {
   const [courseCode, setCourseCode] = useState("all");
-  const [sectionName, setSectionName] = useState("");
+  const [sectionNames, setSectionNames] = useState<string[]>([]);
+  const [studentRolls, setStudentRolls] = useState<string[]>([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [search, setSearch] = useState("");
-  // Filters apply on Generate Report, not on every keystroke.
+  // Filters apply on Generate Report, not on every change.
   const [applied, setApplied] = useState<string | null>(null);
 
-  const buildParams = () => {
+  const buildParams = (withStudents: boolean) => {
     const params = new URLSearchParams();
     if (courseCode !== "all") params.set("courseCode", courseCode);
-    if (sectionName.trim()) params.set("sectionName", sectionName.trim());
+    if (sectionNames.length) params.set("sectionNames", sectionNames.join(","));
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (search.trim()) params.set("search", search.trim());
+    if (withStudents && studentRolls.length) params.set("studentRolls", studentRolls.join(","));
     return params;
   };
 
-  // Always fetched (empty filters) so the course dropdown has options before the first Generate.
-  const { data, isLoading } = useSWR(`/api/faculty/reports/marks-matrix?${applied ?? ""}`, fetcher);
-  const courses = data?.filterOptions.courses ?? [];
-  const sectionNames = [
+  // Option lists follow the current course/section/date choices, before Generate is pressed.
+  const { data: options } = useSWR(`/api/faculty/reports/marks-matrix?${buildParams(false)}`, fetcher);
+  const { data, isLoading } = useSWR(applied === null ? null : `/api/faculty/reports/marks-matrix?${applied}`, fetcher);
+
+  const courses = options?.filterOptions.courses ?? [];
+  const sectionOptions = [
     ...new Set(
-      (data?.filterOptions.sections ?? []).filter((s) => courseCode === "all" || s.courseCode === courseCode).map((s) => s.name),
+      (options?.filterOptions.sections ?? [])
+        .filter((s) => courseCode === "all" || s.courseCode === courseCode)
+        .map((s) => s.name),
     ),
   ].sort();
 
@@ -53,7 +70,7 @@ export function MarksReport() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Marks Report</h1>
         <p className="text-sm text-muted-foreground">
-          Every completed quiz in the chosen date range as a column, with each student&apos;s total. AB = absent.
+          Every completed quiz in the chosen date range as a column, with each student&apos;s attendance and total marks. AB = absent.
         </p>
       </div>
 
@@ -68,7 +85,8 @@ export function MarksReport() {
               value={courseCode}
               onValueChange={(value) => {
                 setCourseCode(value);
-                setSectionName("");
+                setSectionNames([]);
+                setStudentRolls([]);
               }}
               options={[
                 { value: "all", label: "All courses" },
@@ -78,17 +96,27 @@ export function MarksReport() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Section</Label>
-            <SearchableSelect
-              value={sectionName || "all"}
-              onValueChange={(value) => setSectionName(value === "all" ? "" : value)}
-              options={[{ value: "all", label: "All sections" }, ...sectionNames.map((name) => ({ value: name, label: name }))]}
+            <Label>Sections</Label>
+            <MultiSelect
+              values={sectionNames}
+              onValuesChange={(values) => {
+                setSectionNames(values);
+                setStudentRolls([]);
+              }}
+              options={sectionOptions.map((name) => ({ value: name, label: name }))}
+              placeholder="All sections"
               searchPlaceholder="Search sections..."
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Student</Label>
-            <Input placeholder="Name or roll number" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Label>Students</Label>
+            <MultiSelect
+              values={studentRolls}
+              onValuesChange={setStudentRolls}
+              options={(options?.students ?? []).map((s) => ({ value: s.roll, label: `${s.name} (${s.roll})` }))}
+              placeholder="All students"
+              searchPlaceholder="Search name or roll..."
+            />
           </div>
           <div className="space-y-1.5">
             <Label>From</Label>
@@ -99,7 +127,7 @@ export function MarksReport() {
             <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <div className="flex gap-2 sm:col-span-5">
-            <Button onClick={() => setApplied(buildParams().toString())}>Generate Report</Button>
+            <Button onClick={() => setApplied(buildParams(true).toString())}>Generate Report</Button>
             <Button
               variant="outline"
               disabled={applied === null}
@@ -123,21 +151,21 @@ export function MarksReport() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-3 py-2 text-left" colSpan={2}>Quiz Details</th>
+                <th className="px-3 py-2 text-left" colSpan={5}>Quiz Details</th>
                 {data.quizzes.map((q) => (
                   <th key={q.id} className="px-3 py-2 text-center">{q.title}</th>
                 ))}
                 <th className="px-3 py-2 text-center">Total</th>
               </tr>
               <tr>
-                <th className="px-3 py-1 text-left font-normal" colSpan={2}>Quiz Date</th>
+                <th className="px-3 py-1 text-left font-normal" colSpan={5}>Quiz Date</th>
                 {data.quizzes.map((q) => (
                   <th key={q.id} className="px-3 py-1 text-center font-normal">{format(q.date)}</th>
                 ))}
                 <th />
               </tr>
               <tr>
-                <th className="px-3 py-1 text-left font-normal" colSpan={2}>Max Marks</th>
+                <th className="px-3 py-1 text-left font-normal" colSpan={5}>Max Marks</th>
                 {data.quizzes.map((q) => (
                   <th key={q.id} className="px-3 py-1 text-center font-normal">{q.totalMarks}</th>
                 ))}
@@ -146,6 +174,9 @@ export function MarksReport() {
               <tr className="border-t">
                 <th className="px-3 py-2 text-left">Roll Number</th>
                 <th className="px-3 py-2 text-left">Student Name</th>
+                <th className="px-3 py-2 text-center">Total Quizzes</th>
+                <th className="px-3 py-2 text-center">Quizzes Attended</th>
+                <th className="px-3 py-2 text-center">Attendance %</th>
                 <th colSpan={data.quizzes.length + 1} />
               </tr>
             </thead>
@@ -154,6 +185,9 @@ export function MarksReport() {
                 <tr key={r.roll} className="border-t">
                   <td className="px-3 py-2">{r.roll}</td>
                   <td className="px-3 py-2">{r.name}</td>
+                  <td className="px-3 py-2 text-center">{r.totalQuizzes}</td>
+                  <td className="px-3 py-2 text-center">{r.attended}</td>
+                  <td className="px-3 py-2 text-center">{r.attendancePercent}%</td>
                   {r.marks.map((m, i) => (
                     <td key={data.quizzes[i].id} className="px-3 py-2 text-center">{m ?? "—"}</td>
                   ))}

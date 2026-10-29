@@ -10,7 +10,9 @@ import { excelResponseHeaders } from "@/lib/excel";
 
 const querySchema = z.object({
   courseCode: z.string().trim().min(1).optional(),
-  sectionName: z.string().trim().min(1).optional(),
+  // Comma-separated lists; a quiz matches when it was offered to ANY listed section.
+  sectionNames: z.string().trim().min(1).optional(),
+  studentRolls: z.string().trim().min(1).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   search: z.string().trim().optional(),
@@ -30,12 +32,15 @@ export async function GET(req: NextRequest) {
     const query = querySchema.parse(Object.fromEntries(req.nextUrl.searchParams));
     const ownQuizzes = { deletedAt: null, ...(user.role === "faculty" ? { facultyRoll: String(user.sub) } : {}) };
 
+    const sectionFilter = query.sectionNames?.split(",").filter(Boolean) ?? [];
+    const rollFilter = new Set(query.studentRolls?.split(",").filter(Boolean) ?? []);
+
     const quizzes = await prisma.quiz.findMany({
       where: {
         ...ownQuizzes,
         status: "completed",
         ...(query.courseCode ? { courseCode: query.courseCode } : {}),
-        ...(query.sectionName ? sectionNameWhere(query.sectionName) : {}),
+        ...(sectionFilter.length ? { OR: sectionFilter.flatMap((name) => sectionNameWhere(name).OR) } : {}),
         ...(query.from || query.to
           ? {
               startTime: {
@@ -77,8 +82,10 @@ export async function GET(req: NextRequest) {
     const rolls = [...new Set(allotments.map((a) => a.studentRoll))].sort();
     const names = await getStudentNamesByRolls(rolls);
 
+    const students = rolls.map((roll) => ({ roll, name: names.get(roll) ?? roll }));
     const search = query.search?.toLowerCase();
     const rows = rolls
+      .filter((roll) => rollFilter.size === 0 || rollFilter.has(roll))
       .map((roll) => {
         const marks = quizzes.map((q) => {
           const k = key(q.id, roll);
@@ -88,7 +95,11 @@ export async function GET(req: NextRequest) {
           return allotted.has(k) ? 0 : null;
         });
         const total = marks.reduce<number>((sum, m) => sum + (typeof m === "number" ? m : 0), 0);
-        return { roll, name: names.get(roll) ?? roll, marks, total };
+        // Only quizzes the student was allotted count; absent ones do not count as attended.
+        const totalQuizzes = marks.filter((m) => m !== null).length;
+        const attended = marks.filter((m) => m !== null && m !== "AB").length;
+        const attendancePercent = totalQuizzes ? Math.round((attended / totalQuizzes) * 1000) / 10 : 0;
+        return { roll, name: names.get(roll) ?? roll, totalQuizzes, attended, attendancePercent, marks, total };
       })
       .filter((r) => !search || r.roll.toLowerCase().includes(search) || r.name.toLowerCase().includes(search));
 
@@ -97,11 +108,11 @@ export async function GET(req: NextRequest) {
     if (query.export === "excel") {
       const date = (d: Date) => d.toISOString().slice(0, 10);
       const aoa: (string | number)[][] = [
-        ["Quiz Details", "", ...quizzes.map((q) => q.title), "Total"],
-        ["Quiz Date", "", ...quizzes.map((q) => date(q.startTime)), ""],
-        ["Max Marks", "", ...quizzes.map((q) => q.totalMarks), maxTotal],
-        ["Roll Number", "Student Name", ...quizzes.map(() => ""), ""],
-        ...rows.map((r) => [r.roll, r.name, ...r.marks.map((m) => m ?? ""), r.total]),
+        ["Quiz Details", "", "", "", "", ...quizzes.map((q) => q.title), "Total"],
+        ["Quiz Date", "", "", "", "", ...quizzes.map((q) => date(q.startTime)), ""],
+        ["Max Marks", "", "", "", "", ...quizzes.map((q) => q.totalMarks), maxTotal],
+        ["Roll Number", "Student Name", "Total Quizzes", "Quizzes Attended", "Attendance %", ...quizzes.map(() => ""), ""],
+        ...rows.map((r) => [r.roll, r.name, r.totalQuizzes, r.attended, r.attendancePercent, ...r.marks.map((m) => m ?? ""), r.total]),
       ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(aoa), "Marks");
@@ -113,6 +124,7 @@ export async function GET(req: NextRequest) {
       quizzes: quizzes.map((q) => ({ id: q.id, title: q.title, date: q.startTime.toISOString(), totalMarks: q.totalMarks })),
       maxTotal,
       rows,
+      students,
       filterOptions: {
         courses: [...new Map(courseRows.map((q) => [q.courseCode, { code: q.courseCode, name: q.courseName }])).values()],
         // Sections come from the quizzes themselves, so each course lists only its own.
