@@ -82,6 +82,11 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         href: "/admin/reports/results",
         icon: FileText,
       },
+      {
+        label: "Marks Report",
+        href: "/admin/reports/marks",
+        icon: FileBarChart,
+      },
     ],
   },
   {
