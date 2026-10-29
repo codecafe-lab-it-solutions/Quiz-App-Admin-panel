@@ -15,7 +15,7 @@ interface MatrixResponse {
   quizzes: { id: number; title: string; date: string; totalMarks: number }[];
   maxTotal: number;
   rows: { roll: string; name: string; marks: (number | string | null)[]; total: number }[];
-  filterOptions: { courses: { code: string; name: string }[] };
+  filterOptions: { courses: { code: string; name: string }[]; sections: { courseCode: string; name: string }[] };
 }
 
 const fetcher = (url: string) => apiClient.get<MatrixResponse>(url);
@@ -42,6 +42,11 @@ export function MarksReport() {
   // Always fetched (empty filters) so the course dropdown has options before the first Generate.
   const { data, isLoading } = useSWR(`/api/faculty/reports/marks-matrix?${applied ?? ""}`, fetcher);
   const courses = data?.filterOptions.courses ?? [];
+  const sectionNames = [
+    ...new Set(
+      (data?.filterOptions.sections ?? []).filter((s) => courseCode === "all" || s.courseCode === courseCode).map((s) => s.name),
+    ),
+  ].sort();
 
   return (
     <div className="space-y-6">
@@ -61,7 +66,10 @@ export function MarksReport() {
             <Label>Course</Label>
             <SearchableSelect
               value={courseCode}
-              onValueChange={setCourseCode}
+              onValueChange={(value) => {
+                setCourseCode(value);
+                setSectionName("");
+              }}
               options={[
                 { value: "all", label: "All courses" },
                 ...courses.map((c) => ({ value: c.code, label: `${c.name} (${c.code})` })),
@@ -71,7 +79,12 @@ export function MarksReport() {
           </div>
           <div className="space-y-1.5">
             <Label>Section</Label>
-            <Input placeholder="e.g. PE_3 (blank = all)" value={sectionName} onChange={(e) => setSectionName(e.target.value)} />
+            <SearchableSelect
+              value={sectionName || "all"}
+              onValueChange={(value) => setSectionName(value === "all" ? "" : value)}
+              options={[{ value: "all", label: "All sections" }, ...sectionNames.map((name) => ({ value: name, label: name }))]}
+              searchPlaceholder="Search sections..."
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Student</Label>

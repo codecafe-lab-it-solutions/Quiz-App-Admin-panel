@@ -61,8 +61,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.quiz.findMany({
         where: ownQuizzes,
-        distinct: ["courseCode"],
-        select: { courseCode: true, courseName: true },
+        select: { courseCode: true, courseName: true, sectionNames: true },
       }),
     ]);
 
@@ -114,7 +113,17 @@ export async function GET(req: NextRequest) {
       quizzes: quizzes.map((q) => ({ id: q.id, title: q.title, date: q.startTime.toISOString(), totalMarks: q.totalMarks })),
       maxTotal,
       rows,
-      filterOptions: { courses: courseRows.map((q) => ({ code: q.courseCode, name: q.courseName })) },
+      filterOptions: {
+        courses: [...new Map(courseRows.map((q) => [q.courseCode, { code: q.courseCode, name: q.courseName }])).values()],
+        // Sections come from the quizzes themselves, so each course lists only its own.
+        sections: [
+          ...new Map(
+            courseRows.flatMap((q) =>
+              q.sectionNames.split(",").filter(Boolean).map((name) => [`${q.courseCode}|${name}`, { courseCode: q.courseCode, name }] as const),
+            ),
+          ).values(),
+        ],
+      },
     });
   } catch (error) {
     return handleApiError(error);
