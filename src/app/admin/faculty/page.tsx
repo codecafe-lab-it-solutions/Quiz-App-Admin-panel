@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { apiClient, ApiClientError } from "@/lib/api-client";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
 import { FilterBar } from "@/components/admin/filter-bar";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,12 +64,13 @@ type FormValues = z.infer<typeof schema>;
 
 export default function FacultyListPage() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Faculty | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const params = new URLSearchParams({ page: String(page), pageSize: "10", search });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), search });
 
   const { data, isLoading, mutate } = useSWR(`/api/admin/faculty?${params.toString()}`, fetcher);
 
@@ -227,6 +228,7 @@ export default function FacultyListPage() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
 

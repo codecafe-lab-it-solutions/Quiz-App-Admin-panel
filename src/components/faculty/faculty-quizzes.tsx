@@ -8,7 +8,7 @@ import { apiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Plus } from "lucide-react";
 
 interface FacultyQuiz {
@@ -39,8 +39,9 @@ const statusVariant: Record<string, "default" | "secondary" | "success" | "warni
 
 export function FacultyQuizzes() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
 
-  const { data, isLoading } = useSWR(`/api/faculty/quizzes?page=${page}&pageSize=10`, (url: string) =>
+  const { data, isLoading } = useSWR(`/api/faculty/quizzes?page=${page}&pageSize=${pageSize}`, (url: string) =>
     apiClient.get<ListResponse<FacultyQuiz>>(url)
   );
   const quizzes = data?.items ?? [];
@@ -93,6 +94,7 @@ export function FacultyQuizzes() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

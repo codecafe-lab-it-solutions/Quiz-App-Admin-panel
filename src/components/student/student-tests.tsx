@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format-date";
 import { apiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 
 interface StudentQuiz {
   id: number;
@@ -39,8 +39,9 @@ const statusVariant: Record<string, "default" | "secondary" | "success" | "warni
 
 export function StudentTests() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
 
-  const { data, isLoading } = useSWR(`/api/student/quizzes?page=${page}&pageSize=10`, (url: string) =>
+  const { data, isLoading } = useSWR(`/api/student/quizzes?page=${page}&pageSize=${pageSize}`, (url: string) =>
     apiClient.get<ListResponse<StudentQuiz>>(url)
   );
   const quizzes = data?.items ?? [];
@@ -74,6 +75,7 @@ export function StudentTests() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

@@ -34,7 +34,7 @@ import {
 import { RichTextDisplay } from "@/components/quiz/rich-text-display";
 import { AlertTriangle, Copy, Pencil, Play, Plus, Smartphone, Square, Trash2, Upload } from "lucide-react";
 
-const CLIENT_PAGE_SIZE = 10;
+const CLIENT_PAGE_SIZE = 100;
 
 function paginateClient<T>(rows: T[], page: number) {
   const total = rows.length;

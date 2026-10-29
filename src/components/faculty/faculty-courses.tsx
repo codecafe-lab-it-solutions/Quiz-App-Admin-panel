@@ -10,7 +10,7 @@ import { DataTable, DataTableColumn } from "@/components/admin/data-table";
 import { PaginationBar } from "@/components/admin/pagination-bar";
 import { Users } from "lucide-react";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 100;
 
 function paginate<T>(rows: T[], page: number, pageSize = PAGE_SIZE) {
   const total = rows.length;

@@ -42,6 +42,34 @@ const MathFieldInput = dynamic(
 // not count as "outside" the equation Popover/Dialog they were opened from,
 // or Radix closes the popover before mathlive can register the click as a
 // menu selection (symbol never gets inserted, Insert button stays disabled).
+// The reverse proxy rejects request bodies of about 1 MB with a bare 413, and the
+// server caps images at 2 MB. Large photos/screenshots are downscaled to 1600px
+// and re-encoded as JPEG in the browser first. Small files (and GIFs, which would
+// lose their animation) go up untouched.
+const SHRINK_ABOVE_BYTES = 700 * 1024;
+const MAX_IMAGE_SIDE = 1600;
+
+async function shrinkImage(file: File): Promise<File> {
+  if (file.size <= SHRINK_ABOVE_BYTES || file.type === "image/gif") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#fff"; // JPEG has no transparency
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/.w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 export function isMathliveElement(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return !!target.closest(
@@ -149,13 +177,18 @@ export function RichTextEditor({
     setEquationOpen(false);
   };
 
-  const handleImageSelected = async (file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image is too large - the limit is 2 MB");
+  const handleImageSelected = async (original: File) => {
+    if (original.size > 20 * 1024 * 1024) {
+      toast.error("Image is too large - the limit is 20 MB");
       return;
     }
     setUploading(true);
     try {
+      const file = await shrinkImage(original);
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("Image is still over 2 MB after resizing - use a smaller image");
+        return;
+      }
       const formData = new FormData();
       formData.append("file", file);
       const { url } = await apiClient.post<{ url: string }>("/api/faculty/uploads/question-image", formData);

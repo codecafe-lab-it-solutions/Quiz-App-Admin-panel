@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
 import { FilterBar } from "@/components/admin/filter-bar";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -99,10 +99,11 @@ type FormValues = z.infer<typeof schema>;
 export default function FacultyMappingPage() {
   const [facultyRoll, setFacultyRoll] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const params = new URLSearchParams({ page: String(page), pageSize: "10" });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (facultyRoll.trim()) params.set("facultyRoll", facultyRoll.trim());
   const { data, isLoading, mutate } = useSWR(
     `/api/admin/mapping/faculty-course-section?${params.toString()}`,
@@ -403,6 +404,7 @@ export default function FacultyMappingPage() {
               total={data.meta.total}
               pageSize={data.meta.pageSize}
               onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
             />
           )}
         </CardContent>

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { apiClient, ApiClientError } from "@/lib/api-client";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
 import { FilterBar } from "@/components/admin/filter-bar";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { ConfirmDialog } from "@/components/admin/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,10 +52,11 @@ const fetcher = (url: string) => apiClient.get<ListResponse<DeletionRequest>>(ur
 
 export default function DeletionRequestsPage() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
 
-  const params = new URLSearchParams({ page: String(page), pageSize: "10", search, ...(status ? { status } : {}) });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), search, ...(status ? { status } : {}) });
   const { data, isLoading, mutate } = useSWR(`/api/admin/deletion-requests?${params.toString()}`, fetcher);
 
   const updateStatus = async (id: number, newStatus: RequestStatus, accountAction?: "delete" | "deactivate") => {
@@ -219,6 +220,7 @@ export default function DeletionRequestsPage() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

@@ -1,7 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+
+export const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 1000];
+export const DEFAULT_PAGE_SIZE = 100;
+
+export function usePageSize() {
+  return useState(DEFAULT_PAGE_SIZE);
+}
 
 interface PaginationBarProps {
   page: number;
@@ -13,7 +21,7 @@ interface PaginationBarProps {
   pageSizeOptions?: number[];
 }
 
-export function PaginationBar({ page, totalPages, total, pageSize, onPageChange, onPageSizeChange, pageSizeOptions = [10, 25, 50, 100, 500] }: PaginationBarProps) {
+export function PaginationBar({ page, totalPages, total, pageSize, onPageChange, onPageSizeChange, pageSizeOptions = PAGE_SIZE_OPTIONS }: PaginationBarProps) {
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(total, page * pageSize);
 

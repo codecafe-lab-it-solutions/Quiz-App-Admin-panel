@@ -9,7 +9,7 @@ export const attendanceReportQuerySchema = z.object({
   to: z.coerce.date().optional(),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
   export: z.enum(["excel", "pdf"]).optional(),
   // "true" = only students a faculty/admin marked present by hand.
   markedByFaculty: z.enum(["true"]).optional(),
@@ -25,6 +25,6 @@ export const violationsQuerySchema = z.object({
   quizId: z.coerce.number().int().positive().optional(),
   studentRoll: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
 });
 export type ViolationsQuery = z.infer<typeof violationsQuerySchema>;

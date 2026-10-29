@@ -3,7 +3,7 @@ import { z } from "zod";
 export const facultyCourseMappingQuerySchema = z.object({
   facultyRoll: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(10),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
 });
 
 // Backs the "Add Mapping" dialog's Course search dropdown - real courses
@@ -13,7 +13,7 @@ export const courseCatalogQuerySchema = z.object({
   // Capped at 200 to match the other bounded list schemas in this file - the
   // student-course-section browse filter fetches the full catalog at exactly
   // this size (see student-course-section/page.tsx), which a 50-cap rejected.
-  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
 });
 
 // Backs the same dialog's Branch/Semester dropdowns, scoped to whichever
@@ -55,5 +55,5 @@ export const studentCourseMappingQuerySchema = z.object({
   batch: z.string().trim().min(1).optional(),
   sectionName: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
 });

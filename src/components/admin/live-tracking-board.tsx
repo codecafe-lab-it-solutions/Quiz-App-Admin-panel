@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { apiClient } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Radio, Users, Clock } from "lucide-react";
 import { formatDateTime } from "@/lib/format-date";
 
@@ -48,8 +48,9 @@ interface LiveTrackingBoardProps {
 
 export function LiveTrackingBoard({ compact = false }: LiveTrackingBoardProps) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const { data, isLoading } = useSWR(
-    `/api/admin/reports/live-tracking?page=${compact ? 1 : page}&pageSize=12`,
+    `/api/admin/reports/live-tracking?page=${compact ? 1 : page}&pageSize=${compact ? 12 : pageSize}`,
     fetcher,
     { refreshInterval: 12000 },
   );
@@ -120,6 +121,7 @@ export function LiveTrackingBoard({ compact = false }: LiveTrackingBoardProps) {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

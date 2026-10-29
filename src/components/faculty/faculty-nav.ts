@@ -15,6 +15,7 @@ export const FACULTY_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Attendance", href: "/faculty/attendance", icon: FileBarChart },
       { label: "Results", href: "/faculty/results", icon: FileText },
+      { label: "Marks Report", href: "/faculty/reports/marks", icon: FileBarChart },
     ],
   },
 ];

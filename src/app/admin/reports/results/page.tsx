@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { apiClient, downloadFile } from "@/lib/api-client";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,7 @@ const fetcher = (url: string) => apiClient.get<ListResponse<ResultRow>>(url);
 
 export default function AdminResultsPage() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [courseCode, setCourseCode] = useState<string>("all");
   const [sectionName, setSectionName] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -67,7 +68,7 @@ export default function AdminResultsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const buildParams = (extra?: Record<string, string>) => {
-    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (courseCode !== "all") params.set("courseCode", courseCode);
     if (sectionName !== "all") params.set("sectionName", sectionName);
     if (status !== "all") params.set("resultStatus", status);
@@ -299,6 +300,7 @@ export default function AdminResultsPage() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

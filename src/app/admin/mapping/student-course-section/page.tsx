@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,7 @@ export default function StudentMappingPage() {
   const [batch, setBatch] = useState(ALL);
   const [sectionName, setSectionName] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -103,7 +104,7 @@ export default function StudentMappingPage() {
   // still fires - the route returns a bounded "recently registered" default
   // list instead of nothing, so the page shows real, interconnected data
   // immediately.
-  const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (roll.trim()) {
     params.set("roll", roll.trim());
   } else {
@@ -363,6 +364,7 @@ export default function StudentMappingPage() {
               total={data.meta.total}
               pageSize={data.meta.pageSize}
               onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
             />
           )}
         </CardContent>

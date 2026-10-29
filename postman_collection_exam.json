@@ -143,7 +143,7 @@
           "name": "List My Quizzes",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/faculty/quizzes?page=1&pageSize=10"
+            "url": "{{baseUrl}}/api/faculty/quizzes?page=1&pageSize=100"
           }
         },
         {
@@ -182,7 +182,55 @@
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/publish-result",
-            "description": "Single-step result publish - there is no separate \"declare\" step, so the app and portal must both call this the same action and label it the same way (\"Publish Result\", not \"Declare Result\"). Computes each attempt's total from its already-scored answers (including any negative marking) and writes every submitted/auto_submitted attempt's Result straight to status \"published\", visible to the student immediately. Preconditions - each returns a 400 with a specific message if not met: (1) quiz.status must be \"completed\" (call Stop Quiz first), (2) every subjective answer in the quiz must already be manually graded, (3) at least one attempt must be submitted/auto_submitted. 404 if this faculty doesn't own the quiz. Idempotent - safe to call again (e.g. after grading more subjective answers or new students submit)."
+            "description": "Single-step result publish - there is no separate \"declare\" step, so the app and portal must both call this the same action and label it the same way (\"Publish Result\", not \"Declare Result\"). Computes each attempt's total from its already-scored answers (including any negative marking) and writes every submitted/auto_submitted attempt's Result straight to status \"published\", visible to the student immediately. Preconditions - each returns a 400 with a specific message if not met: (1) quiz.status must be \"completed\" (call Stop Quiz first), (2) every subjective answer in the quiz must already be manually graded, (3) at least one attempt must be submitted/auto_submitted. 404 if this faculty doesn't own the quiz. Same rules as the web portal (it is the same endpoint): students the faculty marked present by hand get a published result of 0, and a quiz with no attempts and no manual-present students is rejected with 400 \"No submitted attempts to publish results for\". Response: { publishedCount, manualPresentCount, results[] }. Use Result Summary below to decide whether to enable the button. Idempotent - safe to call again (e.g. after grading more subjective answers or new students submit)."
+          }
+        },
+        {
+          "name": "Result Summary (check before publishing)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/results",
+            "description": "Drives the Publish Result screen in the app, same data as the portal's results card. summary has totalAllotted, attemptedCount, submittedCount, absentCount, proxyCount, markedPresentCount, ungradedCount (subjective answers still needing a grade) and publishedCount (results already visible to students). Enable the Publish Result button only when the quiz is completed and ungradedCount is 0; show 'Published' when publishedCount > 0."
+          }
+        },
+        {
+          "name": "List Subjective Answers to Grade",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/subjective-answers",
+            "description": "Every subjective answer of the quiz's submitted attempts, ungraded first. Returns items[] (answerId, questionText, referenceAnswer, maxMarks, studentRoll, studentName, writtenAnswer, isSkipped, manuallyGraded, marksAwarded) and ungradedCount. Publish Result is blocked until ungradedCount is 0."
+          }
+        },
+        {
+          "name": "Grade Subjective Answer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/faculty/quiz/{{quizId}}/subjective-answers/:answerId",
+            "variable": [
+              {
+                "key": "answerId",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"marksAwarded\": 4\n}"
+            },
+            "description": "Sets the marks for one subjective answer (capped at the question's max marks) and marks it manuallyGraded. Re-publishing after grading refreshes the students' totals."
+          }
+        },
+        {
+          "name": "Marks Report (all quizzes in a date range)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/faculty/reports/marks-matrix?courseCode=&sectionName=&from=2026-08-01&to=2026-10-31&search=",
+            "description": "One row per student, one column per completed quiz between from and to (by quiz start date), plus a Total. Returns quizzes[] (id, title, date, totalMarks), maxTotal and rows[] (roll, name, marks[] aligned with quizzes - a number, \"AB\" for absent, null when not allotted - and total). All filters are optional; search matches student name or roll. Add &export=excel to download the same grid as marks-report.xlsx."
           }
         },
         {

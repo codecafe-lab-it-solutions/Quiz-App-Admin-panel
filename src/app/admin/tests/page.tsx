@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { apiClient } from "@/lib/api-client";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
 import { FilterBar } from "@/components/admin/filter-bar";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format-date";
@@ -43,11 +43,12 @@ const fetcher = (url: string) => apiClient.get<ListResponse<QuizRow>>(url);
 
 export default function AdminTestsPage() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [search, setSearch] = useState("");
 
   const params = new URLSearchParams({
     page: String(page),
-    pageSize: "10",
+    pageSize: String(pageSize),
     search,
   });
   const { data, isLoading } = useSWR(
@@ -149,6 +150,7 @@ export default function AdminTestsPage() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>

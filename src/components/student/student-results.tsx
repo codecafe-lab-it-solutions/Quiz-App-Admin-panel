@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DataTable, DataTableColumn } from "@/components/admin/data-table";
-import { PaginationBar } from "@/components/admin/pagination-bar";
+import { PaginationBar, usePageSize } from "@/components/admin/pagination-bar";
 import { FileSpreadsheet, FileText } from "lucide-react";
 
 interface StudentResult {
@@ -45,6 +45,7 @@ interface ResultsResponse {
 
 export function StudentResults() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const [courseCode, setCourseCode] = useState("all");
   const [sectionName, setSectionName] = useState("all");
   const [search, setSearch] = useState("");
@@ -53,7 +54,7 @@ export function StudentResults() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const buildParams = (extra?: Record<string, string>) => {
-    const params = new URLSearchParams({ page: String(page), pageSize: "10" });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     if (courseCode !== "all") params.set("courseCode", courseCode);
     if (sectionName !== "all") params.set("sectionName", sectionName);
     if (search) params.set("search", search);
@@ -187,6 +188,7 @@ export function StudentResults() {
           total={data.meta.total}
           pageSize={data.meta.pageSize}
           onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
         />
       )}
     </div>
